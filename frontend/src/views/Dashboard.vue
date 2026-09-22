@@ -1,0 +1,149 @@
+<script setup>
+import { ref, computed, onMounted } from 'vue';
+import { createIncidente, updateIncidente } from '../services/api';
+import { useIncidentes } from '../composables/useIncidentes';
+import KanbanBoard from '../components/KanbanBoard.vue';
+import TablaIncidentes from '../components/TablaIncidentes.vue';
+import IncidenteModal from '../components/IncidenteModal.vue';
+
+const vista = ref('kanban');
+const mostrarFormulario = ref(false);
+const editando = ref(false);
+
+const formInicial = { 
+  id: null, folio: '', incidente: '', empresa: '', 
+  area_operativa: '', central: null, tecnico_asignado: null, 
+  estatus_io: '', dilacion_dias: 0, referencia: '', tipo_servicio: ''
+};
+const formActual = ref({ ...formInicial });
+
+const { 
+  cargando, incidentes, tecnicos, centrales, filtros, kpiTotal, 
+  kpiDilacion, columnasKanban, cargarCatalogos, cargarIncidentes 
+} = useIncidentes();
+
+const areasDisponibles = computed(() => {
+  const areas = incidentes.value.map(i => i.area_operativa).filter(Boolean);
+  return [...new Set(areas)];
+});
+
+onMounted(() => {
+  cargarCatalogos();
+  cargarIncidentes();
+});
+
+const abrirNuevo = () => {
+  formActual.value = { ...formInicial };
+  editando.value = false;
+  mostrarFormulario.value = true;
+};
+
+const abrirEditar = (inc) => {
+  formActual.value = { 
+    ...formInicial, 
+    ...inc,
+    area_operativa: inc.area_operativa || inc.area || '',
+    dilacion_dias: inc.dilacion_dias || inc.dilacion || 0,
+    tecnico_asignado: inc.tecnico_asignado || inc.tecnico_nombre || null
+  };
+  editando.value = true;
+  mostrarFormulario.value = true;
+};
+
+const procesarGuardado = async (payload) => {
+  try {
+    if (editando.value) {
+      await updateIncidente(payload.id, payload);
+    } else {
+      await createIncidente(payload);
+    }
+    mostrarFormulario.value = false;
+    cargarIncidentes();
+    alert('¡Registro guardado exitosamente!');
+  } catch (error) {
+    console.error(error);
+    alert('Error al guardar el registro en la base de datos.');
+  }
+};
+</script>
+
+<template>
+  <div class="gio-app">
+    <header class="top-bar">
+      <div class="brand-group">
+        <div class="logo-badge">GIO</div>
+        <h1 class="system-title">SISTEMA DE GESTIÓN DE INCIDENCIAS</h1>
+      </div>
+
+      <div class="header-right">
+        <select v-model="filtros.area" @change="cargarIncidentes" class="zone-selector">
+          <option value="">Área: Todas</option>
+          <option v-for="area in areasDisponibles" :key="area" :value="area">{{ area }}</option>
+        </select>
+        <button @click="abrirNuevo" class="btn btn-primary-gio">+ Nuevo Folio</button>
+      </div>
+    </header>
+
+    <main class="dashboard-body">
+      <section class="kpi-grid">
+        <div class="kpi-card">
+          <div class="kpi-header"><span class="kpi-title">TOTAL FOLIOS</span></div>
+          <div class="kpi-value">{{ kpiTotal }}</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-header">
+            <span class="kpi-title">DILACIÓN > 5 DÍAS</span>
+            <span class="kpi-badge badge-red-text">ALERTA</span>
+          </div>
+          <div class="kpi-value red-text">{{ kpiDilacion }}</div>
+        </div>
+      </section>
+
+      <section class="filter-bar">
+        <div class="filters-left">
+          <span class="filter-label">Filtrar:</span>
+          <select v-model="filtros.tecnico" @change="cargarIncidentes" class="filter-select">
+            <option value="">Técnico: Todos</option>
+            <option v-for="t in tecnicos" :key="t.id" :value="t.nombre">{{ t.nombre }}</option>
+          </select>
+          <select v-model="filtros.estatus" @change="cargarIncidentes" class="filter-select">
+            <option value="">Estado: Todos</option>
+            <option value="ABIERTO">Abierto</option>
+            <option value="EN PROCESO">En Proceso</option>
+            <option value="PENDIENTE">Pendiente</option>
+            <option value="ATENDIDO">Atendido</option>
+            <option value="CERRADO">Cerrado</option>
+          </select>
+        </div>
+        <div class="view-toggle">
+          <button @click="vista = 'tabla'" :class="['toggle-btn', { active: vista === 'tabla' }]">Tabla</button>
+          <button @click="vista = 'kanban'" :class="['toggle-btn', { active: vista === 'kanban' }]">Kanban</button>
+        </div>
+      </section>
+
+      <section v-if="cargando" class="loading-state">Cargando datos...</section>
+
+      <KanbanBoard 
+        v-else-if="vista === 'kanban'" 
+        :columnas="columnasKanban" 
+        @editar="abrirEditar"
+      />
+
+      <TablaIncidentes 
+        v-else 
+        :incidentes="incidentes" 
+        @editar="abrirEditar"
+      />
+    </main>
+
+    <IncidenteModal 
+      v-if="mostrarFormulario"
+      :centrales="centrales" 
+      :editando="editando" 
+      :modelo="formActual" 
+      :tecnicos="tecnicos" 
+      @close="mostrarFormulario = false" 
+      @save="procesarGuardado" 
+    />
+  </div>
+</template>
