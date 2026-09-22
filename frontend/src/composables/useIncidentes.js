@@ -8,8 +8,9 @@ export function useIncidentes() {
   const centrales = ref([]);
   
   const filtros = ref({
-    tecnico: '',
+    area_operativa: '',
     central: '',
+    tecnico: '',
     estatus: ''
   });
 
@@ -17,6 +18,11 @@ export function useIncidentes() {
   const kpiDilacion = computed(() => 
     incidentes.value.filter(i => (i.dilacion_dias || i.dilacion || 0) > 5).length
   );
+
+  const areasDisponibles = computed(() => {
+    const areas = incidentes.value.map(i => i.area_operativa).filter(Boolean);
+    return [...new Set(areas)];
+  });
 
   const cargarCatalogos = async () => {
     try {
@@ -32,8 +38,9 @@ export function useIncidentes() {
     cargando.value = true;
     try {
       const paramsLimpios = {};
-      if (filtros.value.tecnico) paramsLimpios.tecnico_asignado = filtros.value.tecnico;
+      if (filtros.value.area_operativa) paramsLimpios.area_operativa = filtros.value.area_operativa;
       if (filtros.value.central) paramsLimpios.central = filtros.value.central;
+      if (filtros.value.tecnico) paramsLimpios.tecnico_asignado = filtros.value.tecnico;
       if (filtros.value.estatus) paramsLimpios.estatus_io = filtros.value.estatus;
 
       const res = await getIncidentes(paramsLimpios);
@@ -66,7 +73,7 @@ export function useIncidentes() {
   });
 
   return {
-    cargando, incidentes, tecnicos, centrales, filtros,
+    cargando, incidentes, tecnicos, centrales, filtros, areasDisponibles,
     kpiTotal, kpiDilacion, columnasKanban,
     cargarCatalogos, cargarIncidentes
   };

@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, onMounted } from 'vue';
 import { createIncidente, updateIncidente } from '../services/api';
 import { useIncidentes } from '../composables/useIncidentes';
 import KanbanBoard from '../components/KanbanBoard.vue';
@@ -18,14 +18,9 @@ const formInicial = {
 const formActual = ref({ ...formInicial });
 
 const { 
-  cargando, incidentes, tecnicos, centrales, filtros, kpiTotal, 
-  kpiDilacion, columnasKanban, cargarCatalogos, cargarIncidentes 
+  cargando, incidentes, tecnicos, centrales, filtros, areasDisponibles,
+  kpiTotal, kpiDilacion, columnasKanban, cargarCatalogos, cargarIncidentes 
 } = useIncidentes();
-
-const areasDisponibles = computed(() => {
-  const areas = incidentes.value.map(i => i.area_operativa).filter(Boolean);
-  return [...new Set(areas)];
-});
 
 onMounted(() => {
   cargarCatalogos();
@@ -76,10 +71,6 @@ const procesarGuardado = async (payload) => {
       </div>
 
       <div class="header-right">
-        <select v-model="filtros.area" @change="cargarIncidentes" class="zone-selector">
-          <option value="">Área: Todas</option>
-          <option v-for="area in areasDisponibles" :key="area" :value="area">{{ area }}</option>
-        </select>
         <button @click="abrirNuevo" class="btn btn-primary-gio">+ Nuevo Folio</button>
       </div>
     </header>
@@ -99,13 +90,30 @@ const procesarGuardado = async (payload) => {
         </div>
       </section>
 
+      <!-- BARRA UNIFICADA DE FILTROS -->
       <section class="filter-bar">
         <div class="filters-left">
           <span class="filter-label">Filtrar:</span>
+          
+          <!-- Filtro Área Operativa -->
+          <select v-model="filtros.area_operativa" @change="cargarIncidentes" class="filter-select">
+            <option value="">Área: Todas</option>
+            <option v-for="area in areasDisponibles" :key="area" :value="area">{{ area }}</option>
+          </select>
+
+          <!-- Filtro COPE / Central -->
+          <select v-model="filtros.central" @change="cargarIncidentes" class="filter-select">
+            <option value="">COPE: Todos</option>
+            <option v-for="c in centrales" :key="c.id" :value="c.nombre">{{ c.nombre }}</option>
+          </select>
+
+          <!-- Filtro Técnico -->
           <select v-model="filtros.tecnico" @change="cargarIncidentes" class="filter-select">
             <option value="">Técnico: Todos</option>
             <option v-for="t in tecnicos" :key="t.id" :value="t.nombre">{{ t.nombre }}</option>
           </select>
+
+          <!-- Filtro Estatus -->
           <select v-model="filtros.estatus" @change="cargarIncidentes" class="filter-select">
             <option value="">Estado: Todos</option>
             <option value="ABIERTO">Abierto</option>
@@ -115,6 +123,7 @@ const procesarGuardado = async (payload) => {
             <option value="CERRADO">Cerrado</option>
           </select>
         </div>
+
         <div class="view-toggle">
           <button @click="vista = 'tabla'" :class="['toggle-btn', { active: vista === 'tabla' }]">Tabla</button>
           <button @click="vista = 'kanban'" :class="['toggle-btn', { active: vista === 'kanban' }]">Kanban</button>
