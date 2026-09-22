@@ -107,9 +107,7 @@ const exportarCSV = () => {
 
       <div class="header-right">
         <button @click="abrirNuevo" class="btn btn-primary-gio">+ Nuevo Folio</button>
-        <button @click="exportarCSV" class="btn btn-secondary" style="margin-right: 10px;">
-        📥 Exportar Reporte
-        </button>
+        <button @click="exportarCSV" class="btn btn-primary-gio">Exportar Reporte</button>
       </div>
     </header>
 
