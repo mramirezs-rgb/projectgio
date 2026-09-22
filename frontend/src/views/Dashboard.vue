@@ -11,10 +11,12 @@ const mostrarFormulario = ref(false);
 const editando = ref(false);
 
 const formInicial = { 
-  id: null, folio: '', incidente: '', empresa: '', 
-  area_operativa: '', central: null, tecnico_asignado: null, 
-  estatus_io: '', dilacion_dias: 0, referencia: '', tipo_servicio: ''
-};
+  id: null, folio: '', empresa: '', referencia: '', tipo_servicio: '',
+  area_operativa: '', central: null, tecnico_asignado: null, estatus_io: 'ABIERTO',
+  dilacion_dias: 0, direccion: '', ip_servicio: '', dslam: '', red_secundaria: '',
+  estado_enlace: 'DESCONOCIDO', desc_f1: '', desc_cod4: '', desc_carls: '',
+  desc_cod5: '', cve_liq: '', desc_liq: '', obs_usuario: ''
+};;
 const formActual = ref({ ...formInicial });
 
 const { 
@@ -60,6 +62,39 @@ const procesarGuardado = async (payload) => {
     alert('Error al guardar el registro en la base de datos.');
   }
 };
+
+const exportarCSV = () => {
+  if (incidentes.value.length === 0) {
+    alert('No hay datos disponibles para exportar.');
+    return;
+  }
+
+  const cabeceras = ['Folio', 'Empresa', 'Referencia', 'Tipo Servicio', 'Area Operativa', 'Central', 'Tecnico', 'Estatus', 'Dilacion Dias', 'Estado Enlace'];
+  
+  const filas = incidentes.value.map(inc => [
+    `"${inc.folio || ''}"`,
+    `"${inc.empresa || ''}"`,
+    `"${inc.referencia || ''}"`,
+    `"${inc.tipo_servicio || ''}"`,
+    `"${inc.area_operativa || ''}"`,
+    `"${inc.central || ''}"`,
+    `"${inc.tecnico_asignado || ''}"`,
+    `"${inc.estatus_io || ''}"`,
+    inc.dilacion_dias || 0,
+    `"${inc.estado_enlace || ''}"`
+  ]);
+
+  const contenidoCSV = 'data:text/csv;charset=utf-8,' 
+    + [cabeceras.join(','), ...filas.map(e => e.join(','))].join('\n');
+
+  const encodedUri = encodeURI(contenidoCSV);
+  const link = document.createElement('a');
+  link.setAttribute('href', encodedUri);
+  link.setAttribute('download', `Reporte_Incidencias_GIO_${new Date().toISOString().slice(0,10)}.csv`);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+};
 </script>
 
 <template>
@@ -72,6 +107,9 @@ const procesarGuardado = async (payload) => {
 
       <div class="header-right">
         <button @click="abrirNuevo" class="btn btn-primary-gio">+ Nuevo Folio</button>
+        <button @click="exportarCSV" class="btn btn-secondary" style="margin-right: 10px;">
+        📥 Exportar Reporte
+        </button>
       </div>
     </header>
 
