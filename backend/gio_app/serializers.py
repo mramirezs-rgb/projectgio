@@ -7,6 +7,7 @@ class IncidenteSerializer(serializers.ModelSerializer):
     tecnico = serializers.CharField(source='tecnico_asignado', read_only=True)
     tecnico_nombre = serializers.CharField(source='tecnico_asignado', read_only=True)
     central_nombre = serializers.CharField(source='central', read_only=True)
+    estado_enlace = serializers.CharField(source='estatus_qp', required=False, allow_null=True)
 
     class Meta:
         model = Incidente

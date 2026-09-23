@@ -1,4 +1,5 @@
 from django.db import models
+from django.conf import settings
 
 class Incidente(models.Model):
     id = models.BigAutoField(primary_key=True)
@@ -9,7 +10,8 @@ class Incidente(models.Model):
     empresa = models.CharField(max_length=150, blank=True, null=True)
     area_operativa = models.CharField(max_length=100, blank=True, null=True)
     dilacion_dias = models.IntegerField(blank=True, null=True)
-    central = models.CharField(max_length=100, blank=True, null=True)
+    central = models.CharField(max_length=100, help_text="Nombre de la central (Ej. Puebla Centro)")
+    
     tipo_servicio = models.CharField(max_length=50, blank=True, null=True)
     dir_pta_a = models.TextField(blank=True, null=True)
     punta_a = models.CharField(max_length=100, blank=True, null=True)
@@ -19,7 +21,13 @@ class Incidente(models.Model):
     desc_cod4 = models.CharField(max_length=255, blank=True, null=True)
     desc_carls = models.CharField(max_length=255, blank=True, null=True)
     desc_cod5 = models.CharField(max_length=255, blank=True, null=True)
-    tecnico_asignado = models.CharField(max_length=150, blank=True, null=True)
+    tecnico = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='incidentes_asignados'
+    )
     telefono_tecnico = models.CharField(max_length=20, blank=True, null=True)
     ips = models.CharField(max_length=50, blank=True, null=True)
     fecha_ingreso = models.DateTimeField(blank=True, null=True)
@@ -40,7 +48,7 @@ class Incidente(models.Model):
     actualizado_en = models.DateTimeField(blank=True, null=True)
 
     class Meta:
-        managed = False
+        managed = False  # Si quieres que Django administre la creación/migración de esta tabla en PostgreSQL, cambia esto a True
         db_table = 'incidentes_red'
         ordering = ['-id']
 

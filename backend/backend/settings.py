@@ -41,7 +41,10 @@ INSTALLED_APPS = [
     'django_filters',
     'corsheaders',
     'gio_app',
+    'rest_framework_simplejwt',
+    'usuarios',
 ]
+AUTH_USER_MODEL = 'usuarios.UsuarioGIO'
 
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
@@ -88,7 +91,7 @@ DATABASES = {
         'ENGINE': 'django.db.backends.postgresql',
         'NAME': 'sistema_gio',
         'USER': 'postgres',
-        'PASSWORD': '123456',  # Cambia TUPASSWORD por tu contraseña de PostgreSQL
+        'PASSWORD': '123456',
         'HOST': 'localhost',
         'PORT': '5432',
     }
@@ -117,9 +120,9 @@ AUTH_PASSWORD_VALIDATORS = [
 # Internationalization
 # https://docs.djangoproject.com/en/6.1/topics/i18n/
 
-LANGUAGE_CODE = 'en-us'
+LANGUAGE_CODE = 'es-mx'
 
-TIME_ZONE = 'UTC'
+TIME_ZONE = 'America/Mexico_City'
 
 USE_I18N = True
 
@@ -142,11 +145,22 @@ MAILERS = {
 }
 
 REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    ),
     'DEFAULT_FILTER_BACKENDS': (
         'django_filters.rest_framework.DjangoFilterBackend',
         'rest_framework.filters.SearchFilter',
         'rest_framework.filters.OrderingFilter',
     ),
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
-    'PAGE_SIZE': 100,  # Tamaño de página ajustado para vistas Kanban/Tabla
+    'PAGE_SIZE': 100,
+    
+}
+from datetime import timedelta
+
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': timedelta(hours=8),  # Duración de un turno laboral
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
+    'AUTH_HEADER_TYPES': ('Bearer',),
 }
