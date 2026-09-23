@@ -6,7 +6,7 @@ import pandas as pd
 import unicodedata
 import re
 
-# 1. Configurar rutas
+# 1. Configurar rutas para cargar Django
 DIR_ACTUAL = os.path.dirname(os.path.abspath(__file__))
 RUTA_BACKEND = os.path.join(DIR_ACTUAL, 'backend')
 
@@ -17,6 +17,8 @@ os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'backend.settings')
 django.setup()
 
 from gio_app.models import Incidente
+from usuarios.models import UsuarioGIO
+
 
 def normalizar_texto(texto):
     if pd.isna(texto) or texto is None: return ''
@@ -24,26 +26,40 @@ def normalizar_texto(texto):
     texto = unicodedata.normalize('NFD', texto).encode('ascii', 'ignore').decode("utf-8")
     return texto.upper().strip()
 
-def limpiar_dataframe(df):
-    """Busca dinámicamente la fila de encabezados y elimina la basura superior."""
-    header_idx = -1
+
+def mapear_estatus(estatus_raw):
+    """Mapea los estatus técnicos (UP/DOWN) a las columnas del Kanban."""
+    if not estatus_raw:
+        return 'Pendiente'
     
-    # Buscar qué fila contiene los títulos reales
+    e = str(estatus_raw).upper().strip()
+    
+    if 'DOWN' in e or 'ABIERTO' in e or 'FALLA' in e:
+        return 'Abierto'
+    elif 'UP' in e or 'RESUELTO' in e or 'OK' in e or 'LIQUIDADO' in e:
+        return 'Resuelto'
+    elif 'ATENCION' in e or 'PROCESO' in e or 'ASIGNADO' in e:
+        return 'En Atención'
+    elif 'CERRADO' in e or 'CANCELADO' in e:
+        return 'Cerrado'
+    else:
+        return 'Pendiente'
+
+
+def limpiar_dataframe(df):
+    header_idx = -1
     for idx, row in df.head(15).iterrows():
         row_str = ' '.join(str(v).upper() for v in row.values)
         if 'FOLIO' in row_str or 'INCIDENTE' in row_str:
             header_idx = idx
             break
 
-    # Si encuentra los encabezados, recorta el DataFrame
     if header_idx != -1:
         df.columns = df.iloc[header_idx]
         df = df.iloc[header_idx + 1:].reset_index(drop=True)
 
-    # Limpiar los nombres de las columnas
     df.columns = [normalizar_texto(c) for c in df.columns]
 
-    # Separar columnas si todo viene pegado en una sola celda
     if len(df.columns) == 1:
         col_name = df.columns[0]
         nuevas_cols = re.split(r' {2,}|\t+', col_name)
@@ -57,8 +73,8 @@ def limpiar_dataframe(df):
 
     return df
 
+
 def cargar_dataframe(ruta):
-    # Intento 1: HTML disfrazado de XLS (El más común en SISA/QP)
     for enc in ['utf-8', 'latin1', 'cp1252']:
         try:
             tablas = pd.read_html(ruta, encoding=enc)
@@ -67,7 +83,6 @@ def cargar_dataframe(ruta):
         except Exception:
             pass
 
-    # Intento 2: Motores de Excel
     for engine in ['xlrd', 'openpyxl', None]:
         try:
             df = pd.read_excel(ruta, engine=engine)
@@ -77,8 +92,8 @@ def cargar_dataframe(ruta):
             pass
     return None
 
+
 def buscar_valor(row, lista_claves):
-    """Busca el valor exacto usando las claves normalizadas."""
     for clave in lista_claves:
         if clave in row:
             val = str(row[clave]).strip()
@@ -86,42 +101,42 @@ def buscar_valor(row, lista_claves):
                 return val
     return None
 
+
 def es_folio_valido(folio_str):
     if not folio_str:
         return False
-    # Evitar que tome direcciones o textos largos como folio por error
     if len(folio_str) > 15 or ' ' in folio_str:
         return False
     if folio_str.isdigit():
         return len(folio_str) >= 5
     return len(folio_str) >= 3
 
+
 def procesar_archivos():
     archivos = glob.glob('*.xlsx') + glob.glob('*.xls')
     if not archivos:
-        print("No se encontraron archivos .xls o .xlsx")
+        print("❌ No se encontraron archivos .xls o .xlsx.")
         return
 
-    print("Limpiando registros desfasados de la base de datos...")
+    print("Limpiando registros antiguos...")
     Incidente.objects.all().delete()
 
+    # Normalizar áreas de los usuarios a Mayúsculas
+    for u in UsuarioGIO.objects.all():
+        if hasattr(u, 'area') and u.area:
+            u.area = u.area.upper()
+            u.save()
+
     total_creados = 0
-    total_actualizados = 0
 
     for ruta in archivos:
-        print(f"\nProcesando: {ruta}...")
+        print(f"Procesando: {ruta}...")
         df = cargar_dataframe(ruta)
-        
-        if df is None:
-            print(f"❌ No se pudo extraer la información de '{ruta}'.")
-            continue
+        if df is None: continue
 
         for _, row in df.iterrows():
-            # Mapear columnas directamente
             folio = buscar_valor(row, ['FOLIO', 'FOLIO SISA'])
-            
-            if not es_folio_valido(folio):
-                continue
+            if not es_folio_valido(folio): continue
 
             try:
                 dilacion_str = buscar_valor(row, ['DILACION DIAS', 'DILACION', 'DILACION  DIAS'])
@@ -129,30 +144,39 @@ def procesar_archivos():
             except (ValueError, TypeError):
                 dilacion_val = 0
 
-            obj, created = Incidente.objects.update_or_create(
-                folio=folio,
-                defaults={
-                    'incidente': buscar_valor(row, ['INCIDENTE']),
-                    'empresa': buscar_valor(row, ['EMPRESA', 'CLIENTE']),
-                    'referencia': buscar_valor(row, ['REFERENCIA']),
-                    'area_operativa': buscar_valor(row, ['AREA', 'DIVISIONAL', 'REGION', 'AREA OPERATIVA']) or 'PUEBLA',
-                    'central': buscar_valor(row, ['CENTRAL', 'COPE', 'CTRO TRABAJO']),
-                    'tecnico_asignado': buscar_valor(row, ['TECNICO ASIGNADO', 'TECNICO', 'PROVEEDOR']),
-                    'estatus_io': buscar_valor(row, ['ESTATUS I/O', 'ESTATUS TAREA', 'ESTATUS QP', 'ESTATUS']) or 'PENDIENTE',
-                    'tipo_servicio': buscar_valor(row, ['TIPO SERVICIO', 'TIPO_SERVICIO', 'CATEGORIA SERVICIO']),
-                    'dilacion_dias': dilacion_val,
-                    'obs_usuario': buscar_valor(row, ['OBS USUARIO', 'OBSERVACIONES USUARIO', 'OBSERVACIONES SISA']),
-                    'actualizado_por_gio': False
-                }
-            )
-            
-            if created:
-                total_creados += 1
-            else:
-                total_actualizados += 1
+            tecnico_str = buscar_valor(row, ['TECNICO ASIGNADO', 'TECNICO', 'PROVEEDOR'])
+            tecnico_obj = None
+            if tecnico_str:
+                tecnico_obj = UsuarioGIO.objects.filter(expediente=tecnico_str).first() or \
+                              UsuarioGIO.objects.filter(username=tecnico_str).first()
 
-    print(f"\n¡Ingesta completada exitosamente!")
-    print(f"Folios nuevos: {total_creados} | Duplicados actualizados: {total_actualizados}")
+            estatus_raw = buscar_valor(row, ['ESTATUS I/O', 'ESTATUS TAREA', 'ESTATUS QP', 'ESTATUS'])
+            estatus_kanban = mapear_estatus(estatus_raw)
+
+            area_raw = buscar_valor(row, ['AREA', 'DIVISIONAL', 'REGION', 'AREA OPERATIVA']) or 'PUEBLA'
+
+            defaults_data = {
+                'incidente': buscar_valor(row, ['INCIDENTE']),
+                'empresa': buscar_valor(row, ['EMPRESA', 'CLIENTE']),
+                'referencia': buscar_valor(row, ['REFERENCIA']),
+                'area_operativa': area_raw.upper(),
+                'central': buscar_valor(row, ['CENTRAL', 'COPE', 'CTRO TRABAJO']) or 'SIN CENTRAL',
+                'tecnico': tecnico_obj,
+                'estatus_io': estatus_kanban,
+                'tipo_servicio': buscar_valor(row, ['TIPO SERVICIO', 'TIPO_SERVICIO', 'CATEGORIA SERVICIO']),
+                'dilacion_dias': dilacion_val,
+                'obs_usuario': buscar_valor(row, ['OBS USUARIO', 'OBSERVACIONES USUARIO', 'OBSERVACIONES SISA']),
+                'actualizado_por_gio': False
+            }
+
+            if hasattr(Incidente, 'dilacion'):
+                defaults_data['dilacion'] = dilacion_val
+
+            Incidente.objects.update_or_create(folio=folio, defaults=defaults_data)
+            total_creados += 1
+
+    print(f"\n¡Ingesta completada! Se cargaron {total_creados} folios con estatus del Kanban.")
+
 
 if __name__ == '__main__':
     procesar_archivos()

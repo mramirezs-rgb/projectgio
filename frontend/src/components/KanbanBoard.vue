@@ -31,15 +31,15 @@ const emit = defineEmits(['editar']);
               class="card-alert" 
               title="Dilación mayor a 5 días"
             >
-              ⚠️ {{ item.dilacion_dias }}d
+               {{ item.dilacion_dias }}d
             </span>
           </div>
 
           <h4 class="card-empresa">{{ item.empresa }}</h4>
 
           <div class="card-meta">
-            <span>📍 {{ item.central || item.area_operativa || 'S/A' }}</span>
-            <span>👤 {{ item.tecnico_asignado || 'Sin Asignar' }}</span>
+            <span> {{ item.central || item.area_operativa || 'S/A' }}</span>
+            <span> {{ item.tecnico_asignado || 'Sin Asignar' }}</span>
           </div>
 
           <footer class="card-footer">

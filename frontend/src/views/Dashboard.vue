@@ -13,10 +13,16 @@ const editando = ref(false);
 const formInicial = { 
   id: null, folio: '', empresa: '', referencia: '', tipo_servicio: '',
   area_operativa: '', central: null, tecnico_asignado: null, estatus_io: 'ABIERTO',
-  dilacion_dias: 0, direccion: '', ip_servicio: '', dslam: '', red_secundaria: '',
-  estado_enlace: 'DESCONOCIDO', desc_f1: '', desc_cod4: '', desc_carls: '',
-  desc_cod5: '', cve_liq: '', desc_liq: '', obs_usuario: ''
-};;
+  dilacion_dias: 0, 
+  dir_pta_a: '',      // 👈 Nombre real en Django (Dirección Sitio / Enlace)
+  ips: '',            // 👈 Nombre real en Django (IP de Servicio)
+  direccion: '',      // Alias de compatibilidad
+  ip_servicio: '',    // Alias de compatibilidad
+  dslam: '', red_secundaria: '', estado_enlace: 'DESCONOCIDO', 
+  desc_f1: '', desc_cod4: '', desc_carls: '', desc_cod5: '', 
+  cve_liq: '', desc_liq: '', obs_usuario: ''
+};
+
 const formActual = ref({ ...formInicial });
 
 const { 
@@ -39,9 +45,15 @@ const abrirEditar = (inc) => {
   formActual.value = { 
     ...formInicial, 
     ...inc,
+    // Mapeo unificado para estatus_io
+    estatus_io: inc.estatus_io || inc.estatus || inc.estado || 'ABIERTO',
     area_operativa: inc.area_operativa || inc.area || '',
     dilacion_dias: inc.dilacion_dias || inc.dilacion || 0,
-    tecnico_asignado: inc.tecnico_asignado || inc.tecnico_nombre || null
+    tecnico_asignado: inc.tecnico_asignado || inc.tecnico_nombre || null,
+    dir_pta_a: inc.dir_pta_a || inc.direccion || '',
+    ips: inc.ips || inc.ip_servicio || '',
+    direccion: inc.dir_pta_a || inc.direccion || '',
+    ip_servicio: inc.ips || inc.ip_servicio || ''
   };
   editando.value = true;
   mostrarFormulario.value = true;
@@ -49,17 +61,26 @@ const abrirEditar = (inc) => {
 
 const procesarGuardado = async (payload) => {
   try {
+    const datosEnvio = {
+      ...payload,
+      // Se garantiza el nombre exacto de la columna en Django
+      estatus_io: payload.estatus_io || payload.estatus || 'ABIERTO',
+      dir_pta_a: payload.dir_pta_a || payload.direccion || '',
+      ips: payload.ips || payload.ip_servicio || '',
+      estatus_qp: inc.estatus_qp || inc.estado_enlace || 'DESCONOCIDO'
+    };
+
     if (editando.value) {
-      await updateIncidente(payload.id, payload);
+      await updateIncidente(datosEnvio.id, datosEnvio);
     } else {
-      await createIncidente(payload);
+      await createIncidente(datosEnvio);
     }
     mostrarFormulario.value = false;
     cargarIncidentes();
     alert('¡Registro guardado exitosamente!');
   } catch (error) {
-    console.error(error);
-    alert('Error al guardar el registro en la base de datos.');
+    console.error('Error en el servidor:', error.response?.data || error);
+    alert('Error al guardar en la base de datos. Verifica la respuesta del servidor.');
   }
 };
 
@@ -69,7 +90,7 @@ const exportarCSV = () => {
     return;
   }
 
-  const cabeceras = ['Folio', 'Empresa', 'Referencia', 'Tipo Servicio', 'Area Operativa', 'Central', 'Tecnico', 'Estatus', 'Dilacion Dias', 'Estado Enlace'];
+  const cabeceras = ['Folio', 'Empresa', 'Referencia', 'Tipo Servicio', 'Area Operativa', 'Central', 'Tecnico', 'Estatus', 'Dilacion Dias', 'Dirección Sitio', 'IP Servicio'];
   
   const filas = incidentes.value.map(inc => [
     `"${inc.folio || ''}"`,
@@ -81,7 +102,8 @@ const exportarCSV = () => {
     `"${inc.tecnico_asignado || ''}"`,
     `"${inc.estatus_io || ''}"`,
     inc.dilacion_dias || 0,
-    `"${inc.estado_enlace || ''}"`
+    `"${inc.dir_pta_a || inc.direccion || ''}"`,
+    `"${inc.ips || inc.ip_servicio || ''}"`
   ]);
 
   const contenidoCSV = 'data:text/csv;charset=utf-8,' 
@@ -107,7 +129,7 @@ const exportarCSV = () => {
 
       <div class="header-right">
         <button @click="abrirNuevo" class="btn btn-primary-gio">+ Nuevo Folio</button>
-        <button @click="exportarCSV" class="btn btn-primary-gio">Exportar Reporte</button>
+        <button @click="exportarCSV" class="btn btn-primary-gio">- Exportar Reporte</button>
       </div>
     </header>
 

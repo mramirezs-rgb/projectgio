@@ -167,12 +167,12 @@ const cerrar = () => {
         <div v-show="tabActiva === 'tecnico'" class="form-grid">
           <div class="form-group full-width">
             <label>Dirección del Sitio / Enlace</label>
-            <input v-model="form.direccion" type="text" placeholder="Av. Reforma #123, Col. Centro, Puebla" />
+            <input v-model="modelo.dir_pta_a" type="text" placeholder="Av. Reforma #123, Col. Centro, Puebla" />
           </div>
 
           <div class="form-group">
             <label>Dirección IP de Servicio / Gestión</label>
-            <input v-model="form.ip_servicio" type="text" placeholder="Ej. 189.240.12.45" />
+            <input v-model="modelo.ips" type="text" placeholder="Ej. 189.240.12.45" />
           </div>
 
           <div class="form-group">
@@ -187,7 +187,7 @@ const cerrar = () => {
 
           <div class="form-group">
             <label>Estado del Enlace</label>
-            <select v-model="form.estado_enlace">
+            <select v-model="modelo.estatus_qp">
               <option value="DESCONOCIDO">Desconocido</option>
               <option value="UP">UP (Activo / En Línea)</option>
               <option value="DOWN">DOWN (Caído / Falla)</option>
