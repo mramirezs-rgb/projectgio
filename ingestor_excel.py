@@ -6,6 +6,11 @@ import pandas as pd
 import unicodedata
 import re
 
+from django.db.models import Value, Q
+from django.db.models.functions import Concat
+from django.db import IntegrityError
+import random
+
 # 1. Configurar rutas para cargar Django
 DIR_ACTUAL = os.path.dirname(os.path.abspath(__file__))
 RUTA_BACKEND = os.path.join(DIR_ACTUAL, 'backend')
@@ -111,11 +116,85 @@ def es_folio_valido(folio_str):
         return len(folio_str) >= 5
     return len(folio_str) >= 3
 
+from django.db.models import Value, Q
+from django.db.models.functions import Concat
 
+def obtener_tecnico_bd(tecnico_str):
+    if not tecnico_str:
+        return None
+        
+    tecnico_str = tecnico_str.strip()
+    
+    # 1. Buscar por expediente o username
+    u = UsuarioGIO.objects.filter(
+        Q(expediente__iexact=tecnico_str) | Q(username__iexact=tecnico_str)
+    ).first()
+    if u: return u
+
+    # 2. Buscar por Nombre + Apellido ("LUIS ALBERTO SERRANO CAMARILLO")
+    u = UsuarioGIO.objects.annotate(
+        nombre_completo=Concat('first_name', Value(' '), 'last_name')
+    ).filter(nombre_completo__icontains=tecnico_str).first()
+    if u: return u
+
+    # 3. Buscar por Apellido + Nombre ("SERRANO CAMARILLO LUIS ALBERTO")
+    u = UsuarioGIO.objects.annotate(
+        nombre_invertido=Concat('last_name', Value(' '), 'first_name')
+    ).filter(nombre_invertido__icontains=tecnico_str).first()
+    if u: return u
+
+    # 4. Búsqueda por coincidencia de apellido principal
+    palabras = [p for p in tecnico_str.split() if len(p) > 3] # Ignora 'DE', 'LA', 'DEL'
+    for p in palabras:
+        u = UsuarioGIO.objects.filter(
+            Q(first_name__icontains=p) | Q(last_name__icontains=p)
+        ).first()
+        if u: return u
+
+    # 5. SI LLEGA AQUÍ: EL TÉCNICO NO EXISTE. LO CREAMOS AUTOMÁTICAMENTE.
+    partes = tecnico_str.split()
+    if len(partes) >= 3:
+        mitad = len(partes) // 2
+        nombre = " ".join(partes[:mitad])
+        apellido = " ".join(partes[mitad:])
+    elif len(partes) == 2:
+        nombre = partes[0]
+        apellido = partes[1]
+    else:
+        nombre = tecnico_str
+        apellido = ""
+
+    username_base = tecnico_str.lower().replace(" ", ".")[:25]
+    # Generar expediente temporal único para evitar choque de llave duplicada
+    expediente_temp = f"AUTO_{random.randint(100000, 999999)}"
+
+    try:
+        u = UsuarioGIO.objects.create(
+            username=username_base,
+            first_name=nombre[:150],
+            last_name=apellido[:150],
+            expediente=expediente_temp,
+            is_active=True
+        )
+    except IntegrityError:
+        username_alt = f"{username_base[:20]}_{random.randint(1000, 9999)}"
+        expediente_alt = f"AUTO_{random.randint(100000, 999999)}"
+        u = UsuarioGIO.objects.create(
+            username=username_alt,
+            first_name=nombre[:150],
+            last_name=apellido[:150],
+            expediente=expediente_alt,
+            is_active=True
+        )
+        
+    u.fue_creado = True 
+    return u
+
+    return None
 def procesar_archivos():
     archivos = glob.glob('*.xlsx') + glob.glob('*.xls')
     if not archivos:
-        print("❌ No se encontraron archivos .xls o .xlsx.")
+        print(" No se encontraron archivos .xls o .xlsx.")
         return
 
     print("Limpiando registros antiguos...")
@@ -144,11 +223,16 @@ def procesar_archivos():
             except (ValueError, TypeError):
                 dilacion_val = 0
 
-            tecnico_str = buscar_valor(row, ['TECNICO ASIGNADO', 'TECNICO', 'PROVEEDOR'])
-            tecnico_obj = None
+            # --- REEMPLAZA DESDE AQUÍ ---
+            tecnico_str = buscar_valor(row, ['TECNICO ASIGNADO', 'TECNICO', 'PROVEEDOR', 'RESPONSABLE'])
+            tecnico_obj = obtener_tecnico_bd(tecnico_str)
+
+            # LOG DE CONTROL EN LA TERMINAL
             if tecnico_str:
-                tecnico_obj = UsuarioGIO.objects.filter(expediente=tecnico_str).first() or \
-                              UsuarioGIO.objects.filter(username=tecnico_str).first()
+                if hasattr(tecnico_obj, 'fue_creado'):
+                    print(f"⚠️ CREADO NUEVO: '{tecnico_str}' -> ID {tecnico_obj.id}")
+                elif tecnico_obj:
+                    print(f"✅ Enlazado: '{tecnico_str}' -> ID {tecnico_obj.id}")
 
             estatus_raw = buscar_valor(row, ['ESTATUS I/O', 'ESTATUS TAREA', 'ESTATUS QP', 'ESTATUS'])
             estatus_kanban = mapear_estatus(estatus_raw)

@@ -31,7 +31,7 @@ const probarComo = (rol) => {
 
       <form @submit.prevent="handleSubmit" class="login-form">
         <div v-if="errorLogin" class="error-banner">
-          ⚠️ {{ errorLogin }}
+          {{ errorLogin }}
         </div>
 
         <div class="form-group">

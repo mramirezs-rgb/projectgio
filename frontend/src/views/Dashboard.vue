@@ -1,26 +1,37 @@
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, computed } from 'vue';
 import { createIncidente, updateIncidente } from '../services/api';
 import { useIncidentes } from '../composables/useIncidentes';
+import { useAuth } from '../composables/useAuth'; // Agregado para roles
 import KanbanBoard from '../components/KanbanBoard.vue';
 import TablaIncidentes from '../components/TablaIncidentes.vue';
 import IncidenteModal from '../components/IncidenteModal.vue';
+
+// Autenticación y Roles
+const { usuario, cerrarSesion } = useAuth();
+const esAdmin = computed(() => usuario.value?.rol === 'ADMIN' || usuario.value?.is_superuser);
+const esTecnico = computed(() => usuario.value?.rol === 'TECNICO');
 
 const vista = ref('kanban');
 const mostrarFormulario = ref(false);
 const editando = ref(false);
 
+// Estructura inicial alineada al models.py de Django
 const formInicial = { 
-  id: null, folio: '', empresa: '', referencia: '', tipo_servicio: '',
-  area_operativa: '', central: null, tecnico_asignado: null, estatus_io: 'ABIERTO',
+  id: null, 
+  folio: '', 
+  empresa: '', 
+  referencia: '', 
+  tipo_servicio: '',
+  area_operativa: '', 
+  central: '', 
+  tecnico: null, 
+  estatus_io: 'ABIERTO',
+  estatus_qp: 'DESCONOCIDO', // Sustituye a estado_enlace
   dilacion_dias: 0, 
-  dir_pta_a: '',      // 👈 Nombre real en Django (Dirección Sitio / Enlace)
-  ips: '',            // 👈 Nombre real en Django (IP de Servicio)
-  direccion: '',      // Alias de compatibilidad
-  ip_servicio: '',    // Alias de compatibilidad
-  dslam: '', red_secundaria: '', estado_enlace: 'DESCONOCIDO', 
-  desc_f1: '', desc_cod4: '', desc_carls: '', desc_cod5: '', 
-  cve_liq: '', desc_liq: '', obs_usuario: ''
+  dir_pta_a: '',             // Dirección
+  ips: '',                   // IP de servicio
+  obs_usuario: ''
 };
 
 const formActual = ref({ ...formInicial });
@@ -30,9 +41,13 @@ const {
   kpiTotal, kpiDilacion, columnasKanban, cargarCatalogos, cargarIncidentes 
 } = useIncidentes();
 
-onMounted(() => {
-  cargarCatalogos();
-  cargarIncidentes();
+onMounted(async () => {
+  // COMENTA ESTAS LÍNEAS TEMPORALMENTE
+  // if (esTecnico.value && usuario.value?.id) {
+  //   filtros.value.tecnico = usuario.value.id;
+  // }
+  await cargarCatalogos();
+  await cargarIncidentes();
 });
 
 const abrirNuevo = () => {
@@ -45,15 +60,14 @@ const abrirEditar = (inc) => {
   formActual.value = { 
     ...formInicial, 
     ...inc,
-    // Mapeo unificado para estatus_io
-    estatus_io: inc.estatus_io || inc.estatus || inc.estado || 'ABIERTO',
+    // Mapeo seguro para editar
     area_operativa: inc.area_operativa || inc.area || '',
     dilacion_dias: inc.dilacion_dias || inc.dilacion || 0,
-    tecnico_asignado: inc.tecnico_asignado || inc.tecnico_nombre || null,
+    tecnico: inc.tecnico?.id || inc.tecnico || null,
     dir_pta_a: inc.dir_pta_a || inc.direccion || '',
     ips: inc.ips || inc.ip_servicio || '',
-    direccion: inc.dir_pta_a || inc.direccion || '',
-    ip_servicio: inc.ips || inc.ip_servicio || ''
+    estatus_io: inc.estatus_io || 'ABIERTO',
+    estatus_qp: inc.estatus_qp || inc.estado_enlace || 'DESCONOCIDO'
   };
   editando.value = true;
   mostrarFormulario.value = true;
@@ -61,26 +75,36 @@ const abrirEditar = (inc) => {
 
 const procesarGuardado = async (payload) => {
   try {
+    // Sanitización exhaustiva para cumplir con rules de models.py de Django
+    const tecnicoId = Number(payload.tecnico);
     const datosEnvio = {
-      ...payload,
-      // Se garantiza el nombre exacto de la columna en Django
-      estatus_io: payload.estatus_io || payload.estatus || 'ABIERTO',
-      dir_pta_a: payload.dir_pta_a || payload.direccion || '',
-      ips: payload.ips || payload.ip_servicio || '',
-      estatus_qp: inc.estatus_qp || inc.estado_enlace || 'DESCONOCIDO'
+      folio: payload.folio,
+      empresa: payload.empresa || '',
+      referencia: payload.referencia || '',
+      tipo_servicio: payload.tipo_servicio || '',
+      area_operativa: payload.area_operativa || '',
+      central: payload.central || 'SIN CENTRAL', // Evitar nulos si no permite blank
+      dilacion_dias: parseInt(payload.dilacion_dias, 10) || 0, // Forzar Integer
+      dir_pta_a: payload.dir_pta_a || '',
+      ips: payload.ips || '',
+      estatus_io: payload.estatus_io || 'ABIERTO',
+      estatus_qp: payload.estatus_qp || '',
+      obs_usuario: payload.obs_usuario || '',
+      tecnico: Number.isInteger(tecnicoId) && tecnicoId > 0 ? tecnicoId : null // Forzar ForeignKey
     };
 
     if (editando.value) {
-      await updateIncidente(datosEnvio.id, datosEnvio);
+      await updateIncidente(payload.id, datosEnvio);
     } else {
       await createIncidente(datosEnvio);
     }
     mostrarFormulario.value = false;
-    cargarIncidentes();
+    await cargarIncidentes();
     alert('¡Registro guardado exitosamente!');
   } catch (error) {
-    console.error('Error en el servidor:', error.response?.data || error);
-    alert('Error al guardar en la base de datos. Verifica la respuesta del servidor.');
+    console.error('Error al guardar:', error.response?.data || error);
+    const detalleError = error.response?.data ? JSON.stringify(error.response.data, null, 2) : error.message;
+    alert(`No se pudo guardar. Verifica los datos.\nDetalle: ${detalleError}`);
   }
 };
 
@@ -90,7 +114,7 @@ const exportarCSV = () => {
     return;
   }
 
-  const cabeceras = ['Folio', 'Empresa', 'Referencia', 'Tipo Servicio', 'Area Operativa', 'Central', 'Tecnico', 'Estatus', 'Dilacion Dias', 'Dirección Sitio', 'IP Servicio'];
+  const cabeceras = ['Folio', 'Empresa', 'Referencia', 'Tipo Servicio', 'Area Operativa', 'Central', 'Tecnico', 'Estatus IO', 'Estado Enlace', 'Dilacion Dias', 'Direccion', 'IP'];
   
   const filas = incidentes.value.map(inc => [
     `"${inc.folio || ''}"`,
@@ -99,16 +123,15 @@ const exportarCSV = () => {
     `"${inc.tipo_servicio || ''}"`,
     `"${inc.area_operativa || ''}"`,
     `"${inc.central || ''}"`,
-    `"${inc.tecnico_asignado || ''}"`,
+    `"${inc.tecnico_nombre || inc.tecnico?.username || inc.tecnico || ''}"`,
     `"${inc.estatus_io || ''}"`,
+    `"${inc.estatus_qp || ''}"`,
     inc.dilacion_dias || 0,
-    `"${inc.dir_pta_a || inc.direccion || ''}"`,
-    `"${inc.ips || inc.ip_servicio || ''}"`
+    `"${inc.dir_pta_a || ''}"`,
+    `"${inc.ips || ''}"`
   ]);
 
-  const contenidoCSV = 'data:text/csv;charset=utf-8,' 
-    + [cabeceras.join(','), ...filas.map(e => e.join(','))].join('\n');
-
+  const contenidoCSV = 'data:text/csv;charset=utf-8,' + [cabeceras.join(','), ...filas.map(e => e.join(','))].join('\n');
   const encodedUri = encodeURI(contenidoCSV);
   const link = document.createElement('a');
   link.setAttribute('href', encodedUri);
@@ -125,11 +148,25 @@ const exportarCSV = () => {
       <div class="brand-group">
         <div class="logo-badge">GIO</div>
         <h1 class="system-title">SISTEMA DE GESTIÓN DE INCIDENCIAS</h1>
+        
+        <!-- Indicador de Usuario y Rol -->
+        <div class="user-chip" v-if="usuario">
+          <span>👤 {{ usuario.nombre || usuario.username }}</span>
+          <span class="role-tag">{{ usuario.rol || 'ADMIN' }}</span>
+        </div>
       </div>
 
       <div class="header-right">
-        <button @click="abrirNuevo" class="btn btn-primary-gio">+ Nuevo Folio</button>
-        <button @click="exportarCSV" class="btn btn-primary-gio">- Exportar Reporte</button>
+        <!-- Oculto para Rol TÉCNICO -->
+        <button v-if="!esTecnico" @click="abrirNuevo" class="btn btn-primary-gio">
+          + Nuevo Folio
+        </button>
+        
+        <!-- Exclusivo para Rol ADMIN -->
+        <button v-if="esAdmin" @click="exportarCSV" class="btn btn-primary-gio">
+          - Exportar Reporte
+        </button>
+
       </div>
     </header>
 
@@ -153,31 +190,28 @@ const exportarCSV = () => {
         <div class="filters-left">
           <span class="filter-label">Filtrar:</span>
           
-          <!-- Filtro Área Operativa -->
           <select v-model="filtros.area_operativa" @change="cargarIncidentes" class="filter-select">
             <option value="">Área: Todas</option>
             <option v-for="area in areasDisponibles" :key="area" :value="area">{{ area }}</option>
           </select>
 
-          <!-- Filtro COPE / Central -->
           <select v-model="filtros.central" @change="cargarIncidentes" class="filter-select">
             <option value="">COPE: Todos</option>
             <option v-for="c in centrales" :key="c.id" :value="c.nombre">{{ c.nombre }}</option>
           </select>
 
-          <!-- Filtro Técnico -->
-          <select v-model="filtros.tecnico" @change="cargarIncidentes" class="filter-select">
+          <!-- Filtro Técnico (Bloqueado/Oculto si es Técnico) -->
+          <select v-if="!esTecnico" v-model="filtros.tecnico" @change="cargarIncidentes" class="filter-select">
             <option value="">Técnico: Todos</option>
-            <option v-for="t in tecnicos" :key="t.id" :value="t.nombre">{{ t.nombre }}</option>
+            <option v-for="t in tecnicos" :key="t.id" :value="t.id">{{ t.nombre }}</option>
           </select>
 
-          <!-- Filtro Estatus -->
           <select v-model="filtros.estatus" @change="cargarIncidentes" class="filter-select">
             <option value="">Estado: Todos</option>
             <option value="ABIERTO">Abierto</option>
-            <option value="EN PROCESO">En Proceso</option>
+            <option value="EN PROCESO">En Atención</option>
             <option value="PENDIENTE">Pendiente</option>
-            <option value="ATENDIDO">Atendido</option>
+            <option value="RESUELTO">Resuelto</option>
             <option value="CERRADO">Cerrado</option>
           </select>
         </div>
@@ -188,7 +222,9 @@ const exportarCSV = () => {
         </div>
       </section>
 
-      <section v-if="cargando" class="loading-state">Cargando datos...</section>
+      <section v-if="cargando" class="loading-state">
+         Cargando datos...
+      </section>
 
       <KanbanBoard 
         v-else-if="vista === 'kanban'" 
@@ -203,14 +239,53 @@ const exportarCSV = () => {
       />
     </main>
 
+    <!-- Pasa tecnicos y centrales al Modal -->
     <IncidenteModal 
       v-if="mostrarFormulario"
       :centrales="centrales" 
+      :tecnicos="tecnicos"
       :editando="editando" 
       :modelo="formActual" 
-      :tecnicos="tecnicos" 
       @close="mostrarFormulario = false" 
       @save="procesarGuardado" 
     />
   </div>
 </template>
+
+<style scoped>
+/* Estilos adicionales sugeridos para la cabecera de autenticación */
+.user-chip {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background-color: #1e293b;
+  padding: 0.3rem 0.8rem;
+  border-radius: 20px;
+  border: 1px solid #334155;
+  font-size: 0.85rem;
+  color: #e2e8f0;
+  margin-left: 1rem;
+}
+.role-tag {
+  background-color: #2563eb;
+  color: #ffffff;
+  font-size: 0.7rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+  font-weight: 700;
+}
+.btn-logout {
+  background-color: #ef4444;
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: background-color 0.2s;
+}
+.btn-logout:hover {
+  background-color: #dc2626;
+}
+/* Asegúrate de mantener el resto de tus estilos habituales debajo de esto */
+</style>

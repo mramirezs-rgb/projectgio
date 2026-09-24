@@ -15,7 +15,7 @@ const { estaAutenticado, usuario, cerrarSesion } = useAuth();
     <div v-else>
       <div class="user-session-bar">
         <span>👤 Usuario: <strong>{{ usuario?.nombre || usuario?.expediente }}</strong> (Rol: {{ usuario?.rol }})</span>
-        <button @click="cerrarSesion" class="btn-logout">Cerrar Sesión 🚪</button>
+        <button @click="cerrarSesion" class="btn-primary-gio" style="color:  #0f172a;">Cerrar Sesión</button>
       </div>
 
       <Dashboard />

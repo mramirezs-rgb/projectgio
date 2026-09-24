@@ -57,7 +57,6 @@ const cerrar = () => {
         <button class="btn-close" @click="cerrar">&times;</button>
       </header>
 
-      <!-- NAVEGACIÓN POR PESTAÑAS -->
       <nav class="modal-tabs">
         <button 
           type="button" 
@@ -138,9 +137,10 @@ const cerrar = () => {
 
           <div class="form-group">
             <label>Técnico Asignado (PE)</label>
-            <select v-model="form.tecnico_asignado">
+            <!-- CORRECCIÓN: v-model="form.tecnico" y :value="t.id" -->
+            <select v-model="form.tecnico">
               <option :value="null">Sin Asignar</option>
-              <option v-for="t in tecnicos" :key="t.id || t.nombre" :value="t.nombre">
+              <option v-for="t in tecnicos" :key="t.id" :value="t.id">
                 {{ t.nombre }}
               </option>
             </select>
@@ -167,12 +167,14 @@ const cerrar = () => {
         <div v-show="tabActiva === 'tecnico'" class="form-grid">
           <div class="form-group full-width">
             <label>Dirección del Sitio / Enlace</label>
-            <input v-model="modelo.dir_pta_a" type="text" placeholder="Av. Reforma #123, Col. Centro, Puebla" />
+            <!-- CORRECCIÓN: form en lugar de modelo -->
+            <input v-model="form.dir_pta_a" type="text" placeholder="Av. Reforma #123, Col. Centro, Puebla" />
           </div>
 
           <div class="form-group">
             <label>Dirección IP de Servicio / Gestión</label>
-            <input v-model="modelo.ips" type="text" placeholder="Ej. 189.240.12.45" />
+            <!-- CORRECCIÓN: form en lugar de modelo -->
+            <input v-model="form.ips" type="text" placeholder="Ej. 189.240.12.45" />
           </div>
 
           <div class="form-group">
@@ -187,7 +189,8 @@ const cerrar = () => {
 
           <div class="form-group">
             <label>Estado del Enlace</label>
-            <select v-model="modelo.estatus_qp">
+            <!-- CORRECCIÓN: form en lugar de modelo -->
+            <select v-model="form.estatus_qp">
               <option value="DESCONOCIDO">Desconocido</option>
               <option value="UP">UP (Activo / En Línea)</option>
               <option value="DOWN">DOWN (Caído / Falla)</option>
@@ -246,6 +249,7 @@ const cerrar = () => {
 </template>
 
 <style scoped>
+/* LOS ESTILOS SE MANTIENEN INTACTOS */
 .modal-overlay {
   position: fixed;
   top: 0;

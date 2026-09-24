@@ -34,11 +34,9 @@ export function useAuth() {
         throw new Error('El servidor no devolvió un token de sesión.');
       }
 
-      // 1. Guardar en almacenamiento local
       localStorage.setItem('gio_token', tokenRecibido);
       localStorage.setItem('gio_user', JSON.stringify(datosUsuario));
 
-      // 2. Actualizar variables reactivas
       token.value = tokenRecibido;
       usuario.value = datosUsuario;
 
