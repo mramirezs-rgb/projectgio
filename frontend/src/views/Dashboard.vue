@@ -2,12 +2,11 @@
 import { ref, onMounted, computed } from 'vue';
 import { createIncidente, updateIncidente } from '../services/api';
 import { useIncidentes } from '../composables/useIncidentes';
-import { useAuth } from '../composables/useAuth'; // Agregado para roles
+import { useAuth } from '../composables/useAuth';
 import KanbanBoard from '../components/KanbanBoard.vue';
 import TablaIncidentes from '../components/TablaIncidentes.vue';
 import IncidenteModal from '../components/IncidenteModal.vue';
 
-// Autenticación y Roles
 const { usuario, cerrarSesion } = useAuth();
 const esAdmin = computed(() => usuario.value?.rol === 'ADMIN' || usuario.value?.is_superuser);
 const esTecnico = computed(() => usuario.value?.rol === 'TECNICO');
@@ -16,7 +15,6 @@ const vista = ref('kanban');
 const mostrarFormulario = ref(false);
 const editando = ref(false);
 
-// Estructura inicial alineada al models.py de Django
 const formInicial = { 
   id: null, 
   folio: '', 
@@ -27,10 +25,18 @@ const formInicial = {
   central: '', 
   tecnico: null, 
   estatus_io: 'ABIERTO',
-  estatus_qp: 'DESCONOCIDO', // Sustituye a estado_enlace
+  estatus_qp: 'DESCONOCIDO',
   dilacion_dias: 0, 
-  dir_pta_a: '',             // Dirección
-  ips: '',                   // IP de servicio
+  dir_pta_a: '',
+  ips: '',
+  dslam: '',              
+  red_secundaria: '',     
+  desc_f1: '',            
+  desc_cod4: '',          
+  desc_carls: '',         
+  desc_cod5: '',          
+  cve_liq: '',            
+  desc_liq: '',           
   obs_usuario: ''
 };
 
@@ -42,10 +48,9 @@ const {
 } = useIncidentes();
 
 onMounted(async () => {
-  // COMENTA ESTAS LÍNEAS TEMPORALMENTE
-  // if (esTecnico.value && usuario.value?.id) {
-  //   filtros.value.tecnico = usuario.value.id;
-  // }
+   if (esTecnico.value && usuario.value?.id) {
+     filtros.value.tecnico = usuario.value.id;
+  }
   await cargarCatalogos();
   await cargarIncidentes();
 });
@@ -57,13 +62,19 @@ const abrirNuevo = () => {
 };
 
 const abrirEditar = (inc) => {
+  let tecnicoId = null;
+  if (inc.tecnico && typeof inc.tecnico === 'object') {
+    tecnicoId = inc.tecnico.id;
+  } else if (inc.tecnico) {
+    tecnicoId = inc.tecnico;
+  }
+
   formActual.value = { 
     ...formInicial, 
     ...inc,
-    // Mapeo seguro para editar
-    area_operativa: inc.area_operativa || inc.area || '',
+    area_operativa: String(inc.area_operativa || inc.area || '').toUpperCase().trim(),
     dilacion_dias: inc.dilacion_dias || inc.dilacion || 0,
-    tecnico: inc.tecnico?.id || inc.tecnico || null,
+    tecnico: tecnicoId,
     dir_pta_a: inc.dir_pta_a || inc.direccion || '',
     ips: inc.ips || inc.ip_servicio || '',
     estatus_io: inc.estatus_io || 'ABIERTO',
@@ -75,22 +86,35 @@ const abrirEditar = (inc) => {
 
 const procesarGuardado = async (payload) => {
   try {
-    // Sanitización exhaustiva para cumplir con rules de models.py de Django
-    const tecnicoId = Number(payload.tecnico);
+    let tecnicoAsignado = null;
+    if (payload.tecnico && typeof payload.tecnico === 'object') {
+      tecnicoAsignado = payload.tecnico.id;
+    } else if (payload.tecnico) {
+      tecnicoAsignado = parseInt(payload.tecnico, 10);
+    }
+    
     const datosEnvio = {
       folio: payload.folio,
       empresa: payload.empresa || '',
       referencia: payload.referencia || '',
       tipo_servicio: payload.tipo_servicio || '',
-      area_operativa: payload.area_operativa || '',
-      central: payload.central || 'SIN CENTRAL', // Evitar nulos si no permite blank
-      dilacion_dias: parseInt(payload.dilacion_dias, 10) || 0, // Forzar Integer
+      area_operativa: String(payload.area_operativa || '').toUpperCase().trim(),
+      central: payload.central || 'SIN CENTRAL',
+      dilacion_dias: parseInt(payload.dilacion_dias, 10) || 0,
       dir_pta_a: payload.dir_pta_a || '',
       ips: payload.ips || '',
+      red_secundaria: payload.red_secundaria || '',           
+      dslam: payload.dslam || '',                             
+      desc_f1: payload.desc_f1 || '',                         
+      desc_cod4: payload.desc_cod4 || '',                     
+      desc_carls: payload.desc_carls || '',                   
+      desc_cod5: payload.desc_cod5 || '',                     
+      cve_liq: payload.cve_liq || '',                         
+      desc_liq: payload.desc_liq || '',                       
       estatus_io: payload.estatus_io || 'ABIERTO',
       estatus_qp: payload.estatus_qp || '',
       obs_usuario: payload.obs_usuario || '',
-      tecnico: Number.isInteger(tecnicoId) && tecnicoId > 0 ? tecnicoId : null // Forzar ForeignKey
+      tecnico: Number.isInteger(tecnicoAsignado) && tecnicoAsignado > 0 ? tecnicoAsignado : null
     };
 
     if (editando.value) {
@@ -113,9 +137,7 @@ const exportarCSV = () => {
     alert('No hay datos disponibles para exportar.');
     return;
   }
-
   const cabeceras = ['Folio', 'Empresa', 'Referencia', 'Tipo Servicio', 'Area Operativa', 'Central', 'Tecnico', 'Estatus IO', 'Estado Enlace', 'Dilacion Dias', 'Direccion', 'IP'];
-  
   const filas = incidentes.value.map(inc => [
     `"${inc.folio || ''}"`,
     `"${inc.empresa || ''}"`,
@@ -130,7 +152,6 @@ const exportarCSV = () => {
     `"${inc.dir_pta_a || ''}"`,
     `"${inc.ips || ''}"`
   ]);
-
   const contenidoCSV = 'data:text/csv;charset=utf-8,' + [cabeceras.join(','), ...filas.map(e => e.join(','))].join('\n');
   const encodedUri = encodeURI(contenidoCSV);
   const link = document.createElement('a');
@@ -139,6 +160,19 @@ const exportarCSV = () => {
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
+};
+let timerBusqueda = null;
+
+const onFolioInput = () => {
+  clearTimeout(timerBusqueda);
+  timerBusqueda = setTimeout(() => {
+    cargarIncidentes();
+  }, 350); // Ejecuta la búsqueda 350ms después de que el usuario deja de escribir
+};
+
+const limpiarFolio = () => {
+  filtros.value.folio = '';
+  cargarIncidentes();
 };
 </script>
 
@@ -185,10 +219,38 @@ const exportarCSV = () => {
         </div>
       </section>
 
-      <!-- BARRA UNIFICADA DE FILTROS -->
+            <!-- BARRA UNIFICADA DE FILTROS -->
       <section class="filter-bar">
         <div class="filters-left">
-          <span class="filter-label">Filtrar:</span>
+          <span class="filter-label">Buscar:</span>
+          
+          <!-- NUEVA BARRA DE BÚSQUEDA POR FOLIO -->
+          <div class="search-box">
+            <span class="search-icon"></span>
+            <input 
+              v-model="filtros.folio" 
+              @input="onFolioInput"
+              @keyup.enter="cargarIncidentes"
+              type="text" 
+              placeholder="Folio (ej. 12578004)..." 
+              class="filter-input"
+            />
+            <button 
+              v-if="filtros.folio" 
+              @click="limpiarFolio" 
+              class="btn-clear-folio" 
+              type="button"
+            >
+              ✕
+            </button>
+          </div>
+
+          <span class="filter-label ms-2">Filtrar:</span>
+
+          <select v-model="filtros.area_operativa" @change="cargarIncidentes" class="filter-select">
+            <option value="">Área: Todas</option>
+            <option v-for="area in areasDisponibles" :key="area" :value="area">{{ area }}</option>
+          </select>
           
           <select v-model="filtros.area_operativa" @change="cargarIncidentes" class="filter-select">
             <option value="">Área: Todas</option>
@@ -200,7 +262,6 @@ const exportarCSV = () => {
             <option v-for="c in centrales" :key="c.id" :value="c.nombre">{{ c.nombre }}</option>
           </select>
 
-          <!-- Filtro Técnico (Bloqueado/Oculto si es Técnico) -->
           <select v-if="!esTecnico" v-model="filtros.tecnico" @change="cargarIncidentes" class="filter-select">
             <option value="">Técnico: Todos</option>
             <option v-for="t in tecnicos" :key="t.id" :value="t.id">{{ t.nombre }}</option>
@@ -214,8 +275,7 @@ const exportarCSV = () => {
             <option value="RESUELTO">Resuelto</option>
             <option value="CERRADO">Cerrado</option>
           </select>
-        </div>
-
+        </div>s
         <div class="view-toggle">
           <button @click="vista = 'tabla'" :class="['toggle-btn', { active: vista === 'tabla' }]">Tabla</button>
           <button @click="vista = 'kanban'" :class="['toggle-btn', { active: vista === 'kanban' }]">Kanban</button>
@@ -244,6 +304,7 @@ const exportarCSV = () => {
       v-if="mostrarFormulario"
       :centrales="centrales" 
       :tecnicos="tecnicos"
+      :areas="areasDisponibles"
       :editando="editando" 
       :modelo="formActual" 
       @close="mostrarFormulario = false" 
@@ -286,6 +347,55 @@ const exportarCSV = () => {
 }
 .btn-logout:hover {
   background-color: #dc2626;
+}
+.search-box {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.search-icon {
+  position: absolute;
+  left: 8px;
+  font-size: 0.8rem;
+  pointer-events: none;
+  opacity: 0.6;
+}
+
+.filter-input {
+  padding: 0.4rem 1.8rem 0.4rem 1.8rem;
+  border-radius: 6px;
+  border: 1px solid #334155;
+  background-color: #1e293b;
+  color: #f8fafc;
+  font-size: 0.85rem;
+  outline: none;
+  width: 180px;
+  transition: border-color 0.2s, width 0.2s;
+}
+
+.filter-input:focus {
+  border-color: #2563eb;
+  width: 220px;
+}
+
+.btn-clear-folio {
+  position: absolute;
+  right: 6px;
+  background: none;
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+  font-size: 0.75rem;
+  padding: 2px 4px;
+}
+
+.btn-clear-folio:hover {
+  color: #f8fafc;
+}
+
+.ms-2 {
+  margin-left: 0.75rem;
 }
 /* Asegúrate de mantener el resto de tus estilos habituales debajo de esto */
 </style>

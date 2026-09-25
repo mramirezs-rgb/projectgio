@@ -1,5 +1,5 @@
 <script setup>
-import { ref, watch } from 'vue';
+import { ref, watch, computed } from 'vue';
 
 const props = defineProps({
   modelo: {
@@ -18,27 +18,66 @@ const props = defineProps({
   tecnicos: {
     type: Array,
     default: () => []
+  }, // 👈 COMA CORREGIDA AQUÍ
+  areas: { 
+    type: Array,
+    default: () => []
   }
 });
 
 const emit = defineEmits(['close', 'save']);
-
-// Estado local del formulario clonado desde las props
-const form = ref({ ...props.modelo });
-
-// Control de la pestaña activa en el modal
+const form = ref({});
 const tabActiva = ref('general');
 
+// Lista base de áreas estándar
+const listaAreasBase = [
+  'PUEBLA',
+  'PACHUCA',
+  'VERACRUZ',
+  'POZA RICA',
+  'JALAPA',
+  'TLAXCALA',
+  'CÓRDOBA',
+  'CORDOBA',
+  'COATZACOALCOS'
+];
+
+// Unifica áreas base + áreas recibidas del backend/CSV + área actual del registro
+const todasLasAreas = computed(() => {
+  const conjunto = new Set([...listaAreasBase, ...props.areas]);
+  if (form.value.area_operativa) {
+    conjunto.add(form.value.area_operativa);
+  }
+  return Array.from(conjunto).filter(Boolean).sort();
+});
+
+// Normalización al cargar datos en el formulario
 watch(
   () => props.modelo,
   (val) => {
-    form.value = { ...val };
+    if (!val) return;
+    const copia = JSON.parse(JSON.stringify(val));
+    
+    // Normalizar Área (verifica tanto area_operativa como area)
+    const valorArea = copia.area_operativa || copia.area || '';
+    copia.area_operativa = String(valorArea).toUpperCase().trim();
+    
+    // Normalizar Técnico
+    if (copia.tecnico && typeof copia.tecnico === 'object') {
+      copia.tecnico = copia.tecnico.id;
+    }
+
+    form.value = copia;
   },
-  { deep: true }
+  { deep: true, immediate: true }
 );
 
 const guardar = () => {
-  emit('save', form.value);
+  const payload = { ...form.value };
+  if (payload.area_operativa) {
+    payload.area_operativa = payload.area_operativa.toUpperCase().trim();
+  }
+  emit('save', payload);
 };
 
 const cerrar = () => {
@@ -88,17 +127,14 @@ const cerrar = () => {
             <label>Folio SISA / Ticket *</label>
             <input v-model="form.folio" type="text" placeholder="Ej. FOL-2026-001" required />
           </div>
-
           <div class="form-group">
             <label>Empresa / Cliente *</label>
             <input v-model="form.empresa" type="text" placeholder="Nombre de la empresa" required />
           </div>
-
           <div class="form-group">
             <label>Referencia de Servicio</label>
             <input v-model="form.referencia" type="text" placeholder="Ej. REF-992812" />
           </div>
-
           <div class="form-group">
             <label>Tipo de Servicio</label>
             <select v-model="form.tipo_servicio">
@@ -110,42 +146,35 @@ const cerrar = () => {
             </select>
           </div>
 
+          <!-- ÁREA OPERATIVA UNIFICADA -->
           <div class="form-group">
             <label>Área Operativa *</label>
             <select v-model="form.area_operativa" required>
               <option value="">Seleccionar Área...</option>
-              <option value="Puebla">Puebla</option>
-              <option value="Pachuca">Pachuca</option>
-              <option value="Veracruz">Veracruz</option>
-              <option value="Poza Rica">Poza Rica</option>
-              <option value="Jalapa">Jalapa</option>
-              <option value="Tlaxcala">Tlaxcala</option>
-              <option value="Córdoba">Córdoba</option>
-              <option value="Coatzacoalcos">Coatzacoalcos</option>
+              <option v-for="area in todasLasAreas" :key="area" :value="area">
+                {{ area }}
+              </option>
             </select>
           </div>
 
           <div class="form-group">
             <label>COPE / Central *</label>
             <select v-model="form.central" required>
-              <option :value="null">Seleccionar Central...</option>
+              <option value="">Seleccionar Central...</option>
               <option v-for="c in centrales" :key="c.id || c.nombre" :value="c.nombre">
                 {{ c.nombre }}
               </option>
             </select>
           </div>
-
           <div class="form-group">
             <label>Técnico Asignado (PE)</label>
-            <!-- CORRECCIÓN: v-model="form.tecnico" y :value="t.id" -->
             <select v-model="form.tecnico">
               <option :value="null">Sin Asignar</option>
               <option v-for="t in tecnicos" :key="t.id" :value="t.id">
-                {{ t.nombre }}
+                {{ t.nombre || t.username }}
               </option>
             </select>
           </div>
-
           <div class="form-group">
             <label>Estatus I/O</label>
             <select v-model="form.estatus_io">
@@ -156,40 +185,32 @@ const cerrar = () => {
               <option value="CERRADO">Cerrado</option>
             </select>
           </div>
-
           <div class="form-group">
             <label>Dilación (Días)</label>
             <input v-model.number="form.dilacion_dias" type="number" min="0" />
           </div>
         </div>
 
-        <!-- PESTAÑA 2: DATOS TÉCNICOS DE RED -->
+        <!-- PESTAÑA 2: TÉCNICOS -->
         <div v-show="tabActiva === 'tecnico'" class="form-grid">
           <div class="form-group full-width">
             <label>Dirección del Sitio / Enlace</label>
-            <!-- CORRECCIÓN: form en lugar de modelo -->
             <input v-model="form.dir_pta_a" type="text" placeholder="Av. Reforma #123, Col. Centro, Puebla" />
           </div>
-
           <div class="form-group">
             <label>Dirección IP de Servicio / Gestión</label>
-            <!-- CORRECCIÓN: form en lugar de modelo -->
             <input v-model="form.ips" type="text" placeholder="Ej. 189.240.12.45" />
           </div>
-
           <div class="form-group">
             <label>DSLAM / Bastidor / Puerto</label>
             <input v-model="form.dslam" type="text" placeholder="Ej. DSLAM-PB-02 / B-04 / P-12" />
           </div>
-
           <div class="form-group">
             <label>Red Secundaria / Par</label>
             <input v-model="form.red_secundaria" type="text" placeholder="Ej. CABLE 12 / PAR 45" />
           </div>
-
           <div class="form-group">
             <label>Estado del Enlace</label>
-            <!-- CORRECCIÓN: form en lugar de modelo -->
             <select v-model="form.estatus_qp">
               <option value="DESCONOCIDO">Desconocido</option>
               <option value="UP">UP (Activo / En Línea)</option>
@@ -198,45 +219,38 @@ const cerrar = () => {
           </div>
         </div>
 
-        <!-- PESTAÑA 3: CLASIFICACIÓN SISA Y LIQUIDACIÓN -->
+        <!-- PESTAÑA 3: SISA -->
         <div v-show="tabActiva === 'sisa'" class="form-grid">
           <div class="form-group">
             <label>DESC F1 (Familia Falla)</label>
             <input v-model="form.desc_f1" type="text" placeholder="Ej. SIN TONO / CORTE FISICO" />
           </div>
-
           <div class="form-group">
             <label>DESC COD4 (Causa Raíz)</label>
             <input v-model="form.desc_cod4" type="text" placeholder="Ej. FIBRA OPTICA ATENUADA" />
           </div>
-
           <div class="form-group">
             <label>DESC CARLS (Diagnóstico)</label>
             <input v-model="form.desc_carls" type="text" placeholder="Ej. DAÑO EN TRAMO EXTERNO" />
           </div>
-
           <div class="form-group">
             <label>DESC COD5 (Acción Correctiva)</label>
             <input v-model="form.desc_cod5" type="text" placeholder="Ej. REEMPLAZO DE PUERTO / EMPALME" />
           </div>
-
           <div class="form-group">
             <label>Clave Liquidación (CVE LIQ)</label>
             <input v-model="form.cve_liq" type="text" placeholder="Ej. LIQ-01" />
           </div>
-
           <div class="form-group">
             <label>Descripción Liquidación (DESC LIQ)</label>
             <input v-model="form.desc_liq" type="text" placeholder="Ej. SERVICIO RESTABLECIDO Y PROBADO" />
           </div>
-
           <div class="form-group full-width">
             <label>Observaciones SISA / Bitácora OQU</label>
-            <textarea v-model="form.obs_usuario" rows="3" placeholder="Ingresa notas técnicas adicionales o seguimiento del operador..."></textarea>
+            <textarea v-model="form.obs_usuario" rows="3" placeholder="Ingresa notas técnicas adicionales..."></textarea>
           </div>
         </div>
 
-        <!-- PIE DEL MODAL (BOTONES DE ACCIÓN) -->
         <footer class="modal-footer">
           <button type="button" class="btn btn-secondary" @click="cerrar">Cancelar</button>
           <button type="submit" class="btn btn-primary-gio">
@@ -249,7 +263,6 @@ const cerrar = () => {
 </template>
 
 <style scoped>
-/* LOS ESTILOS SE MANTIENEN INTACTOS */
 .modal-overlay {
   position: fixed;
   top: 0;
@@ -263,7 +276,6 @@ const cerrar = () => {
   align-items: center;
   z-index: 1000;
 }
-
 .modal-container {
   background-color: #1e293b;
   border: 1px solid #334155;
@@ -277,7 +289,6 @@ const cerrar = () => {
   overflow: hidden;
   color: #f8fafc;
 }
-
 .modal-header {
   display: flex;
   justify-content: space-between;
@@ -286,13 +297,11 @@ const cerrar = () => {
   background-color: #0f172a;
   border-bottom: 1px solid #334155;
 }
-
 .header-title {
   display: flex;
   align-items: center;
   gap: 0.75rem;
 }
-
 .badge-tag {
   background-color: #2563eb;
   color: #fff;
@@ -301,12 +310,10 @@ const cerrar = () => {
   padding: 0.2rem 0.5rem;
   border-radius: 4px;
 }
-
 .modal-header h3 {
   margin: 0;
   font-size: 1.25rem;
 }
-
 .btn-close {
   background: transparent;
   border: none;
@@ -314,18 +321,14 @@ const cerrar = () => {
   font-size: 1.75rem;
   cursor: pointer;
 }
-
 .btn-close:hover {
   color: #fff;
 }
-
-/* TABS */
 .modal-tabs {
   display: flex;
   background-color: #0f172a;
   border-bottom: 1px solid #334155;
 }
-
 .tab-btn {
   flex: 1;
   padding: 0.75rem 1rem;
@@ -338,18 +341,14 @@ const cerrar = () => {
   cursor: pointer;
   transition: all 0.2s;
 }
-
 .tab-btn:hover {
   color: #cbd5e1;
 }
-
 .tab-btn.active {
   color: #38bdf8;
   border-bottom-color: #38bdf8;
   background-color: rgba(56, 189, 248, 0.05);
 }
-
-/* FORMULARIO Y GRID */
 .modal-body {
   padding: 1.5rem;
   overflow-y: auto;
@@ -357,29 +356,24 @@ const cerrar = () => {
   flex-direction: column;
   gap: 1.5rem;
 }
-
 .form-grid {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 1rem;
 }
-
 .form-group {
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
 }
-
 .form-group.full-width {
   grid-column: span 2;
 }
-
 .form-group label {
   font-size: 0.8rem;
   font-weight: 600;
   color: #94a3b8;
 }
-
 .form-group input,
 .form-group select,
 .form-group textarea {
@@ -392,14 +386,11 @@ const cerrar = () => {
   outline: none;
   transition: border-color 0.2s;
 }
-
 .form-group input:focus,
 .form-group select:focus,
 .form-group textarea:focus {
   border-color: #38bdf8;
 }
-
-/* FOOTER */
 .modal-footer {
   display: flex;
   justify-content: flex-end;
@@ -407,7 +398,6 @@ const cerrar = () => {
   padding-top: 1rem;
   border-top: 1px solid #334155;
 }
-
 .btn {
   padding: 0.6rem 1.2rem;
   border-radius: 6px;
@@ -415,25 +405,20 @@ const cerrar = () => {
   cursor: pointer;
   border: none;
 }
-
 .btn-secondary {
   background-color: #334155;
   color: #f1f5f9;
 }
-
 .btn-secondary:hover {
   background-color: #475569;
 }
-
 .btn-primary-gio {
   background-color: #2563eb;
   color: #ffffff;
 }
-
 .btn-primary-gio:hover {
   background-color: #1d4ed8;
 }
-
 @media (max-width: 640px) {
   .form-grid {
     grid-template-columns: 1fr;

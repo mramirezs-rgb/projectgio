@@ -2,12 +2,14 @@ import { ref, computed } from 'vue';
 import { getIncidentes, getTecnicos, getCentrales } from '../services/api';
 
 export function useIncidentes() {
+  
   const cargando = ref(false);
   const incidentes = ref([]);
   const tecnicos = ref([]);
   const centrales = ref([]);
 
   const filtros = ref({
+    folio: '',
     area_operativa: '',
     central: '',
     tecnico: '',
