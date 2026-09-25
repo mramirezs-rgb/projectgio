@@ -2,13 +2,21 @@ from rest_framework import serializers
 from .models import Incidente
 
 class IncidenteSerializer(serializers.ModelSerializer):
-    area = serializers.CharField(source='area_operativa', read_only=True)
-    dilacion = serializers.IntegerField(source='dilacion_dias', read_only=True)
-    tecnico = serializers.CharField(source='tecnico_asignado', read_only=True)
-    tecnico_nombre = serializers.CharField(source='tecnico_asignado', read_only=True)
-    central_nombre = serializers.CharField(source='central', read_only=True)
-    estado_enlace = serializers.CharField(source='estatus_qp', required=False, allow_null=True)
+    # Alias de LECTURA para el frontend (no interfieren con la escritura)
+    area = serializers.ReadOnlyField(source='area_operativa')
+    dilacion = serializers.ReadOnlyField(source='dilacion_dias')
+    estado_enlace = serializers.ReadOnlyField(source='estatus_qp')
+    central_nombre = serializers.ReadOnlyField(source='central')
+    
+    # Campo calculado para mostrar el nombre completo del técnico en tablas y kanban
+    tecnico_nombre = serializers.SerializerMethodField()
 
     class Meta:
         model = Incidente
         fields = '__all__'
+
+    def get_tecnico_nombre(self, obj):
+        if obj.tecnico:
+            nombre = f"{getattr(obj.tecnico, 'first_name', '')} {getattr(obj.tecnico, 'last_name', '')}".strip()
+            return nombre if nombre else getattr(obj.tecnico, 'username', str(obj.tecnico))
+        return "Sin Asignar"

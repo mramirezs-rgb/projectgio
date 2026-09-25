@@ -9,7 +9,7 @@ from .serializers import IncidenteSerializer
 
 class IncidenteFilter(django_filters.FilterSet):
     tecnico_expediente = django_filters.CharFilter(field_name='tecnico__username')
-
+    folio = django_filters.CharFilter(lookup_expr='icontains')
     class Meta:
         model = Incidente
         fields = ['tecnico', 'central', 'estatus_io', 'estatus_qp', 'area_operativa']
