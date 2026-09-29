@@ -16,7 +16,6 @@ export function useIncidentes() {
     estatus: ''
   });
 
-  // KPI Seguros
   const kpiTotal = computed(() => Array.isArray(incidentes.value) ? incidentes.value.length : 0);
   const kpiDilacion = computed(() => {
     if (!Array.isArray(incidentes.value)) return 0;
@@ -26,7 +25,6 @@ export function useIncidentes() {
   const normalizarEstatus = (inc) => {
     if (!inc) return 'Abierto';
     
-    // Normalizar a mayúsculas de forma segura
     const io = String(inc.estatus_io || inc.estatus || inc.estado || inc.status || '').trim().toUpperCase();
     const qp = String(inc.estatus_qp || inc.estado_enlace || '').trim().toUpperCase();
 
@@ -52,16 +50,14 @@ export function useIncidentes() {
     return [...new Set(areas)];
   });
 
-  // 1. CARGA DE CATÁLOGOS (Técnicos y Centrales) EN PARALELO Y PROTEGIDA
+  // 1. CARGA DE CATÁLOGOS
   const cargarCatalogos = async () => {
     try {
-      // Usamos Promise.all pero capturamos errores individuales para que uno no rompa al otro
       const [resTec, resCen] = await Promise.all([
         getTecnicos().catch(err => { console.warn('Error getTecnicos:', err); return null; }),
         getCentrales().catch(err => { console.warn('Error getCentrales:', err); return null; })
       ]);
 
-      // Procesar Técnicos (Como en tu BD vienen nulos, dependemos 100% de esta API)
       if (resTec) {
         const rawData = resTec.data?.results || resTec.data || resTec || [];
         const lista = Array.isArray(rawData) ? rawData : [];
@@ -73,7 +69,6 @@ export function useIncidentes() {
         tecnicos.value = [];
       }
 
-      // Procesar Centrales
       if (resCen) {
         const rawData = resCen.data?.results || resCen.data || resCen || [];
         centrales.value = Array.isArray(rawData) ? rawData : [];
@@ -85,22 +80,39 @@ export function useIncidentes() {
     }
   };
 
-  // 2. CARGA DE INCIDENTES PROTEGIDA
+  // 2. CARGA DE INCIDENTES CON ENRIQUECIMIENTO DE TÉCNICOS
   const cargarIncidentes = async () => {
     cargando.value = true;
     try {
       const params = {};
+      if (filtros.value.folio) params.search = filtros.value.folio;
       if (filtros.value.area_operativa) params.area_operativa = filtros.value.area_operativa;
       if (filtros.value.central) params.central = filtros.value.central;
-      if (filtros.value.tecnico) params.tecnico_asignado = filtros.value.tecnico;
+      if (filtros.value.tecnico) params.tecnico = filtros.value.tecnico; 
       if (filtros.value.estatus) params.estatus_io = filtros.value.estatus;
 
       const res = await getIncidentes(params);
-      
-      // Desenvolver la respuesta sin importar si el backend la pagina (results) o la envía directa
       const rawData = res?.data?.results || res?.data || res || [];
-      incidentes.value = Array.isArray(rawData) ? rawData : [];
-      
+      const lista = Array.isArray(rawData) ? rawData : [];
+
+      incidentes.value = lista.map(inc => {
+        let nombreTecnico = inc.tecnico_nombre;
+
+        if (!nombreTecnico) {
+          if (typeof inc.tecnico === 'object' && inc.tecnico) {
+            nombreTecnico = inc.tecnico.first_name || inc.tecnico.nombre || inc.tecnico.username;
+          } else if (inc.tecnico) {
+            const match = tecnicos.value.find(t => Number(t.id) === Number(inc.tecnico));
+            if (match) nombreTecnico = match.nombre;
+          }
+        }
+
+        return {
+          ...inc,
+          tecnico_nombre: nombreTecnico || 'Sin Asignar'
+        };
+      });
+
     } catch (error) {
       console.error('Error al consultar incidentes:', error);
       incidentes.value = [];
@@ -109,7 +121,6 @@ export function useIncidentes() {
     }
   };
 
-  // 3. KANBAN ROBUSTO CON TODAS LAS PROPIEDADES POSIBLES INYECTADAS
   const columnasKanban = computed(() => {
     const plantilla = [
       { id: 'Abierto', key: 'Abierto', titulo: 'Abierto', label: 'Abierto', color: '#3b82f6' },
@@ -130,7 +141,6 @@ export function useIncidentes() {
       const estatus = normalizarEstatus(inc);
       const col = mapa[estatus] || mapa['Abierto'];
       
-      // Agregamos a todas las propiedades para evitar que el componente Kanban falle
       col.items.push(inc);
       col.cards.push(inc);
       col.incidentes.push(inc);

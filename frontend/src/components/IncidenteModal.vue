@@ -58,13 +58,25 @@ watch(
     if (!val) return;
     const copia = JSON.parse(JSON.stringify(val));
     
-    // Normalizar Área (verifica tanto area_operativa como area)
+    // Normalizar Área
     const valorArea = copia.area_operativa || copia.area || '';
     copia.area_operativa = String(valorArea).toUpperCase().trim();
+
+    // Normalizar Estatus I/O y Estado del Enlace
+    if (copia.estatus_io) {
+      copia.estatus_io = String(copia.estatus_io).toUpperCase().trim();
+    }
+    if (copia.estatus_qp || copia.estado_enlace) {
+      copia.estatus_qp = String(copia.estatus_qp || copia.estado_enlace).toUpperCase().trim();
+    }
     
     // Normalizar Técnico
     if (copia.tecnico && typeof copia.tecnico === 'object') {
-      copia.tecnico = copia.tecnico.id;
+      copia.tecnico = Number(copia.tecnico.id);
+    } else if (copia.tecnico) {
+      copia.tecnico = Number(copia.tecnico);
+    } else {
+      copia.tecnico = null;
     }
 
     form.value = copia;
@@ -139,13 +151,13 @@ const cerrar = () => {
             <label>Tipo de Servicio</label>
             <select v-model="form.tipo_servicio">
               <option value="">Seleccionar...</option>
+              <option value="BASICO">Básico</option>
               <option value="ENLACE_DEDICADO">Enlace Dedicado</option>
               <option value="INTERNET_EMPRESARIAL">Internet Empresarial</option>
               <option value="DATOS_VPN">VPN / Red Privada</option>
               <option value="TRUNCAL_SIP">Truncal SIP / Telefonía</option>
             </select>
           </div>
-
           <!-- ÁREA OPERATIVA UNIFICADA -->
           <div class="form-group">
             <label>Área Operativa *</label>
@@ -178,11 +190,11 @@ const cerrar = () => {
           <div class="form-group">
             <label>Estatus I/O</label>
             <select v-model="form.estatus_io">
+              <option value="">Seleccionar...</option>
               <option value="ABIERTO">Abierto</option>
-              <option value="EN PROCESO">En Atención</option>
-              <option value="PENDIENTE">Pendiente Material</option>
-              <option value="ATENDIDO">Resuelto / Atendido</option>
               <option value="CERRADO">Cerrado</option>
+              <option value="EN_PROGRESO">En Progreso</option>
+              <option value="DESCONOCIDO">Desconocido</option>
             </select>
           </div>
           <div class="form-group">

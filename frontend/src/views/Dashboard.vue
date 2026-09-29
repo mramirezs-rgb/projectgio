@@ -251,11 +251,6 @@ const limpiarFolio = () => {
             <option value="">Área: Todas</option>
             <option v-for="area in areasDisponibles" :key="area" :value="area">{{ area }}</option>
           </select>
-          
-          <select v-model="filtros.area_operativa" @change="cargarIncidentes" class="filter-select">
-            <option value="">Área: Todas</option>
-            <option v-for="area in areasDisponibles" :key="area" :value="area">{{ area }}</option>
-          </select>
 
           <select v-model="filtros.central" @change="cargarIncidentes" class="filter-select">
             <option value="">COPE: Todos</option>
@@ -275,7 +270,8 @@ const limpiarFolio = () => {
             <option value="RESUELTO">Resuelto</option>
             <option value="CERRADO">Cerrado</option>
           </select>
-        </div>s
+        </div>
+        
         <div class="view-toggle">
           <button @click="vista = 'tabla'" :class="['toggle-btn', { active: vista === 'tabla' }]">Tabla</button>
           <button @click="vista = 'kanban'" :class="['toggle-btn', { active: vista === 'kanban' }]">Kanban</button>
@@ -283,7 +279,7 @@ const limpiarFolio = () => {
       </section>
 
       <section v-if="cargando" class="loading-state">
-         Cargando datos...
+         
       </section>
 
       <KanbanBoard 
@@ -396,6 +392,85 @@ const limpiarFolio = () => {
 
 .ms-2 {
   margin-left: 0.75rem;
+}
+
+/* ==========================================
+   AJUSTES PARA PANTALLAS MÓVILES (<= 768px)
+   ========================================== */
+@media (max-width: 768px) {
+  /* 1. Header y barra superior */
+  .header-container,
+  .top-bar,
+  .dashboard-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.75rem;
+    padding: 0.75rem;
+  }
+
+  .header-title-group {
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .user-info-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    gap: 0.5rem;
+  }
+
+  /* Botón de Nuevo Folio a ancho completo o alineado */
+  .btn-nuevo-folio,
+  .btn-primary {
+    width: 100%;
+    text-align: center;
+    justify-content: center;
+  }
+
+  /* 2. Tarjetas de métricas (KPIs) */
+  .kpi-container,
+  .stats-grid {
+    grid-template-columns: 1fr; /* Una sola columna en móvil */
+    gap: 0.75rem;
+  }
+
+  /* 3. Sección de Filtros y Búsqueda */
+  .filtros-container,
+  .search-filter-bar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.75rem;
+  }
+
+  .filtros-group {
+    flex-direction: column;
+    width: 100%;
+    gap: 0.5rem;
+  }
+
+  .filtros-container input,
+  .filtros-container select {
+    width: 100% !important;
+    max-width: 100%;
+  }
+
+  /* 4. Tablero Kanban Móvil */
+  .kanban-board {
+    display: flex;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    gap: 1rem;
+    padding-bottom: 1rem;
+  }
+
+  .kanban-column {
+    min-width: 85vw; /* Ocupa casi todo el ancho de la pantalla */
+    scroll-snap-align: start;
+  }
 }
 /* Asegúrate de mantener el resto de tus estilos habituales debajo de esto */
 </style>

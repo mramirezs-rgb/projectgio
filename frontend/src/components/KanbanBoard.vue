@@ -7,6 +7,7 @@ const props = defineProps({
 });
 
 const emit = defineEmits(['editar']);
+
 </script>
 
 <template>
@@ -39,7 +40,7 @@ const emit = defineEmits(['editar']);
 
           <div class="card-meta">
             <span> {{ item.central || item.area_operativa || 'S/A' }}</span>
-            <span> {{ item.tecnico_asignado || 'Sin Asignar' }}</span>
+            <span> {{ item.tecnico_nombre || 'Sin Asignar' }}</span>
           </div>
 
           <footer class="card-footer">
