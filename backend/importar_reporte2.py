@@ -6,7 +6,6 @@ import django
 from django.utils.dateparse import parse_datetime
 from django.utils import timezone
 
-# 1. Configurar entorno Django
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'backend.settings')
 try:
     django.setup()
@@ -21,7 +20,6 @@ except Exception:
 from django.apps import apps
 from django.contrib.auth import get_user_model
 
-# 2. Buscar Modelo Incidente
 Incidente = None
 for model in apps.get_models():
     if model.__name__ in ['Incidente', 'IncidenteRed']:
@@ -29,7 +27,7 @@ for model in apps.get_models():
         break
 
 if not Incidente:
-    print("❌ ERROR: No se encontró el modelo de Incidentes.")
+    print(" ERROR: No se encontró el modelo de Incidentes.")
     exit()
 
 User = get_user_model()
@@ -40,17 +38,37 @@ def normalizar_cadena(texto):
     s = unicodedata.normalize('NFD', str(texto)).encode('ascii', 'ignore').decode("utf-8")
     return s.strip().upper()
 
+def limpiar_central_cope(texto):
+    """
+    Limpia los nombres de centrales/COPEs:
+    - Transforma 'LER - CT LERDO' -> 'LERDO'
+    - Transforma 'MAO - CT GUADALUPE (MAYORAZGO)' -> 'GUADALUPE (MAYORAZGO)'
+    - Transforma 'CT PACHUCA' -> 'PACHUCA'
+    """
+    if not texto or pd.isna(texto):
+        return "SIN CENTRAL"
+    
+    val = str(texto).strip().upper()
+    if val in ['', 'NAN', 'NONE', 'SIN CENTRAL', 'SIN COPE']:
+        return "SIN CENTRAL"
+    
+    if '-' in val:
+        val = val.split('-', 1)[1].strip()
+    elif ':' in val:
+        val = val.split(':', 1)[1].strip()
+        
+    val = re.sub(r'^(CT|CENTRAL|COPE)\s+', '', val)
+    
+    return val.strip() if val else "SIN CENTRAL"
+
 def vaciar_base_de_datos():
-    print("==================================================")
-    print(" 🧹 INICIANDO LIMPIEZA DE LA BASE DE DATOS")
-    print("==================================================")
+    print(" INICIANDO LIMPIEZA DE LA BASE DE DATOS")
     
     num_incidentes, _ = Incidente.objects.all().delete()
     print(f"-> Incidentes eliminados: {num_incidentes}")
 
     num_tecnicos, _ = User.objects.filter(is_superuser=False, is_staff=False).delete()
     print(f"-> Usuarios técnicos anteriores eliminados: {num_tecnicos}")
-    print("==================================================\n")
 
 def generar_datos_usuario(nombre_completo):
     s = unicodedata.normalize('NFD', nombre_completo).encode('ascii', 'ignore').decode("utf-8")
@@ -68,7 +86,7 @@ def generar_datos_usuario(nombre_completo):
 
 def obtener_o_crear_tecnico(nombre_tecnico):
     if not nombre_tecnico or str(nombre_tecnico).strip().lower() in ['', 'nan', 'none']:
-        return None
+        nombre_tecnico = "SIN ASIGNAR"
 
     nombre_tecnico = str(nombre_tecnico).strip()
     primer_nombre = nombre_tecnico.split()[0]
@@ -106,10 +124,9 @@ def obtener_o_crear_tecnico(nombre_tecnico):
 def cargar_csv():
     archivo_path = 'REPORTE2.csv'
     if not os.path.exists(archivo_path):
-        print(f"❌ Error: No se encontró el archivo '{archivo_path}'.")
+        print(f" Error: No se encontró el archivo '{archivo_path}'.")
         return
 
-    # Leer CSV buscando la fila real de cabeceras
     raw_df = pd.read_csv(archivo_path, encoding='utf-8', header=None).fillna('')
     
     header_idx = 0
@@ -122,21 +139,17 @@ def cargar_csv():
     df = raw_df.iloc[header_idx + 1:].copy()
     df.columns = [normalizar_cadena(c) for c in raw_df.iloc[header_idx]]
 
-    print("🔍 DIAGNÓSTICO DE COLUMNAS ENCONTRADAS EN CSV:")
-    print("--------------------------------------------------")
+    print(" DIAGNÓSTICO DE COLUMNAS ENCONTRADAS EN CSV:")
     print(list(df.columns))
-    print("--------------------------------------------------\n")
 
-    # Identificar columna de Área en el CSV
     col_area = None
     for col in df.columns:
         if 'AREA' in col or 'ZONA' in col or 'SECTOR' in col:
             col_area = col
             break
             
-    print(f"📌 Columna detectada para Área en CSV: [{col_area if col_area else 'NO DETECTADA'}]")
+    print(f" Columna detectada para Área en CSV: [{col_area if col_area else 'NO DETECTADA'}]")
 
-    # Diagnóstico del Modelo Incidente en Django
     campos_modelo = {f.name: f for f in Incidente._meta.get_fields()}
     
     campo_area_modelo = None
@@ -145,11 +158,10 @@ def cargar_csv():
             campo_area_modelo = posible
             break
 
-    print(f"📌 Campo destino detectado en BD Django: [{campo_area_modelo if campo_area_modelo else 'NINGUNO'}]\n")
+    print(f" Campo destino detectado en BD Django: [{campo_area_modelo if campo_area_modelo else 'NINGUNO'}]\n")
 
     vaciar_base_de_datos()
 
-    # Normalizar folios y eliminar duplicados
     if 'FOLIO' in df.columns:
         df['FOLIO'] = df['FOLIO'].astype(str).str.strip()
         df['FOLIO'] = df['FOLIO'].apply(lambda x: x[:-2] if x.endswith('.0') else x)
@@ -163,7 +175,6 @@ def cargar_csv():
         if not folio:
             continue
 
-        # Extraer valor del área
         area_val = ""
         if col_area and col_area in row:
             area_val = str(row.get(col_area, '')).strip().upper()
@@ -177,9 +188,15 @@ def cargar_csv():
         nombre_tecnico = str(row.get('TECNICO ASIGNADO', row.get('TECNICO', ''))).strip()
         tecnico_obj = obtener_o_crear_tecnico(nombre_tecnico)
 
+        val_central = str(row.get('CENTRAL', '')).strip()
+        val_cope = str(row.get('COPE', '')).strip()
+        
+        central_cruda = val_central if (val_central and val_central.upper() not in ['NAN', 'NONE']) else val_cope
+        central_limpia = limpiar_central_cope(central_cruda)
+
         empresa_val = str(row.get('EMPRESA', '')).strip() or 'SIN EMPRESA'
-        estatus_io_val = str(row.get('ESTATUS I/O', row.get('ESTATUS', ''))).strip() or 'ABIERTO'
-        central_val = str(row.get('CENTRAL', row.get('COPE', ''))).strip() or 'SIN CENTRAL'
+        estatus_io_val = str(row.get('ESTATUS I/O', row.get('ESTATUS', ''))).strip().upper() or 'ABIERTO'
+        estatus_qp_val = str(row.get('ESTATUS QP', row.get('ESTADO ENLACE', ''))).strip().upper() or 'DESCONOCIDO'
         obs_val = str(row.get('OBS USUARIO', row.get('OBSERVACIONES SISA', ''))).strip()
 
         try:
@@ -204,8 +221,8 @@ def cargar_csv():
             'dir_pta_a': str(row.get('DIR PTA A', '')).strip(),
             'ips': str(row.get('IPS', '')).strip(),
             'dslam': str(row.get('DSLAM', '')).strip(),
-            'cope': str(row.get('COPE', '')).strip(),
-            'central': central_val,
+            'cope': limpiar_central_cope(val_cope),
+            'central': central_limpia,
             'red_secundaria': str(row.get('RED SECUNDARIA', '')).strip(),
             'estatus_io': estatus_io_val,
             'estatus_qp': str(row.get('ESTATUS QP', '')).strip() or 'DESCONOCIDO',
@@ -226,7 +243,6 @@ def cargar_csv():
             'tecnico': tecnico_obj
         }
 
-        # Manejo de ForeignKey o CharField para el campo Área
         if campo_area_modelo:
             field_obj = campos_modelo[campo_area_modelo]
             if field_obj.is_relation and field_obj.many_to_one:
@@ -241,15 +257,12 @@ def cargar_csv():
 
         Incidente.objects.update_or_create(folio=folio, defaults=datos)
         
-        if procesados < 3:
-            print(f"-> Muestra [{folio}]: ÁREA asignada = '{area_val}' (Guardado en campo '{campo_area_modelo}')")
+        if procesados < 10:
+            print(f"-> Muestra [{folio}]: ÁREA = '{area_val}' | CENTRAL = '{central_limpia}' | TÉCNICO = '{tecnico_obj.first_name}'")
 
         procesados += 1
 
-    print("\n==================================================")
     print(f" ¡IMPORTACIÓN COMPLETADA EXITOSAMENTE!")
     print(f" -> Total de folios importados: {procesados}")
-    print("==================================================")
-
 if __name__ == '__main__':
     cargar_csv()
