@@ -78,7 +78,7 @@ const obtenerClaseEnlace = (estado) => {
           </td>
           <td>
             <div class="acciones-group">
-              <button @click="emit('editar', inc)" class="btn-action edit" title="Editar Folio">
+              <button @click="emit('editar', inc)" class="btn btn-primary-gio" title="Editar Folio">
                 Editar
               </button>
             </div>

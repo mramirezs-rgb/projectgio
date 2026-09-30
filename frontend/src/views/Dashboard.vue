@@ -311,6 +311,50 @@ const limpiarFolio = () => {
 
 <style scoped>
 /* Estilos adicionales sugeridos para la cabecera de autenticación */
+.dashboard-container {
+  width: 100%;
+  max-width: 100%;
+  padding: 1rem;
+  box-sizing: border-box;
+}
+
+/* Header flexible */
+.dashboard-header {
+  display: flex;
+  flex-wrap: wrap; /* Permite que los elementos bajen de línea en móvil */
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  width: 100%;
+}
+
+/* Grid de métricas / tarjetas KPI */
+.metrics-grid, .stats-container {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); /* Adaptable */
+  gap: 1rem;
+  width: 100%;
+}
+
+/* Barra de filtros y búsquedas */
+.filters-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  width: 100%;
+}
+
+.filters-bar input,
+.filters-bar select {
+  flex: 1 1 200px;
+  min-width: 0; 
+}
+
+.kanban-wrapper, .tabla-wrapper {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
 .user-chip {
   display: flex;
   align-items: center;
@@ -394,11 +438,7 @@ const limpiarFolio = () => {
   margin-left: 0.75rem;
 }
 
-/* ==========================================
-   AJUSTES PARA PANTALLAS MÓVILES (<= 768px)
-   ========================================== */
 @media (max-width: 768px) {
-  /* 1. Header y barra superior */
   .header-container,
   .top-bar,
   .dashboard-header {
@@ -423,7 +463,6 @@ const limpiarFolio = () => {
     gap: 0.5rem;
   }
 
-  /* Botón de Nuevo Folio a ancho completo o alineado */
   .btn-nuevo-folio,
   .btn-primary {
     width: 100%;
@@ -431,14 +470,12 @@ const limpiarFolio = () => {
     justify-content: center;
   }
 
-  /* 2. Tarjetas de métricas (KPIs) */
   .kpi-container,
   .stats-grid {
-    grid-template-columns: 1fr; /* Una sola columna en móvil */
+    grid-template-columns: 1fr;
     gap: 0.75rem;
   }
 
-  /* 3. Sección de Filtros y Búsqueda */
   .filtros-container,
   .search-filter-bar {
     flex-direction: column;
@@ -458,7 +495,6 @@ const limpiarFolio = () => {
     max-width: 100%;
   }
 
-  /* 4. Tablero Kanban Móvil */
   .kanban-board {
     display: flex;
     overflow-x: auto;
@@ -468,9 +504,8 @@ const limpiarFolio = () => {
   }
 
   .kanban-column {
-    min-width: 85vw; /* Ocupa casi todo el ancho de la pantalla */
+    min-width: 85vw;
     scroll-snap-align: start;
   }
 }
-/* Asegúrate de mantener el resto de tus estilos habituales debajo de esto */
 </style>
