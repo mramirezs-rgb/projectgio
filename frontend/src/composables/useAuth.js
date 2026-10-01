@@ -1,5 +1,5 @@
 import { ref, computed } from 'vue';
-import { loginApi } from '../services/api.js'; // Ajusta según la ubicación de tu api.js
+import { loginApi } from '../services/api.js';
 
 // ESTADO GLOBAL COMPARTIDO
 const token = ref(localStorage.getItem('gio_token') || null);
@@ -8,8 +8,18 @@ const cargando = ref(false);
 const errorLogin = ref(null);
 
 export function useAuth() {
-  // Propiedad reactiva que escucha App.vue para alternar la vista
   const estaAutenticado = computed(() => !!token.value);
+
+  // EVALUACIÓN DE ROLES EXACTOS SEGÚN EL BACKEND
+  const esTecnico = computed(() => usuario.value?.rol === 'TECNICO');
+  const esEvaluador = computed(() => usuario.value?.rol === 'PI_EVALUADOR');
+  const esSubgerencia = computed(() => usuario.value?.rol === 'PI_SUB');
+  const esGerencia = computed(() => usuario.value?.rol === 'ADMIN' || usuario.value?.is_superuser);
+
+  // PERMISOS DERIVADOS (Para mostrar/ocultar botones)
+  const puedeCrearFolio = computed(() => esSubgerencia.value || esGerencia.value);
+  const puedeAsignar = computed(() => esSubgerencia.value || esGerencia.value);
+  const puedeGestionarUsuarios = computed(() => esGerencia.value);
 
   const iniciarSesion = async (expediente, password) => {
     cargando.value = true;
@@ -22,12 +32,14 @@ export function useAuth() {
         password: password
       });
 
-      // Extraer Token de la respuesta según formato JWT o Rest Framework
       const tokenRecibido = response.data.access || response.data.token || response.data.key;
+      
+      // Fallback seguro: Si el backend no envía rol, asignamos el de menor nivel.
       const datosUsuario = response.data.user || response.data.usuario || { 
+        id: null,
         expediente, 
         nombre: expediente, 
-        rol: 'ADMIN' 
+        rol: 'PI_EVALUADOR' 
       };
 
       if (!tokenRecibido) {
@@ -65,6 +77,14 @@ export function useAuth() {
     estaAutenticado,
     cargando,
     errorLogin,
+    // Exportamos los roles para usarlos en los componentes
+    esTecnico,
+    esEvaluador,
+    esSubgerencia,
+    esGerencia,
+    puedeCrearFolio,
+    puedeAsignar,
+    puedeGestionarUsuarios,
     iniciarSesion,
     cerrarSesion
   };

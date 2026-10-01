@@ -1,5 +1,5 @@
 import axios from 'axios';
-
+export const getEvaluadores = () => api.get('/evaluadores/');
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
 
 const api = axios.create({

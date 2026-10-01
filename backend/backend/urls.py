@@ -4,14 +4,12 @@ from rest_framework_simplejwt.views import (
     TokenObtainPairView,
     TokenRefreshView,
 )
-
+from gio_app.views import EvaluadorListView
 urlpatterns = [
     path('admin/', admin.site.urls),
-
-    # Autenticación JWT (Resuelve el error 404 en /api/auth/login/)
     path('api/auth/login/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('api/auth/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
-
-    # Endpoints de la aplicación (Rutas de incidentes, técnicos y centrales)
     path('api/', include('gio_app.urls')),
+    path('evaluadores/', EvaluadorListView.as_view(), name='evaluadores-list'),
+
 ]

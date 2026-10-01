@@ -18,7 +18,11 @@ const props = defineProps({
   tecnicos: {
     type: Array,
     default: () => []
-  }, // 👈 COMA CORREGIDA AQUÍ
+  },
+  evaluadores: { 
+    type: Array,
+    default: () => []
+  },
   areas: { 
     type: Array,
     default: () => []
@@ -77,6 +81,15 @@ watch(
       copia.tecnico = Number(copia.tecnico);
     } else {
       copia.tecnico = null;
+    }
+
+    // Normalizar Evaluador
+    if (copia.evaluador && typeof copia.evaluador === 'object') {
+      copia.evaluador = Number(copia.evaluador.id);
+    } else if (copia.evaluador) {
+      copia.evaluador = Number(copia.evaluador);
+    } else {
+      copia.evaluador = null;
     }
 
     form.value = copia;
@@ -158,7 +171,6 @@ const cerrar = () => {
               <option value="TRUNCAL_SIP">Truncal SIP / Telefonía</option>
             </select>
           </div>
-          <!-- ÁREA OPERATIVA UNIFICADA -->
           <div class="form-group">
             <label>Área Operativa *</label>
             <select v-model="form.area_operativa" required>
@@ -187,6 +199,17 @@ const cerrar = () => {
               </option>
             </select>
           </div>
+          
+          <div class="form-group">
+            <label>Evaluador Asignado (PI)</label>
+            <select v-model="form.evaluador">
+              <option :value="null">Sin Asignar</option>
+              <option v-for="e in evaluadores" :key="e.id" :value="e.id">
+                {{ e.nombre || e.username }}
+              </option>
+            </select>
+          </div>
+
           <div class="form-group">
             <label>Estatus I/O</label>
             <select v-model="form.estatus_io">
@@ -275,6 +298,7 @@ const cerrar = () => {
 </template>
 
 <style scoped>
+/* Los estilos se mantienen exactamente igual a como los tenías */
 .modal-overlay {
   position: fixed;
   top: 0;

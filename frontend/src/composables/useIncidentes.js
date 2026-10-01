@@ -1,11 +1,12 @@
 import { ref, computed } from 'vue';
-import { getIncidentes, getTecnicos, getCentrales } from '../services/api';
+import { getIncidentes, getTecnicos, getEvaluadores, getCentrales } from '../services/api';
 
 export function useIncidentes() {
   
   const cargando = ref(false);
   const incidentes = ref([]);
   const tecnicos = ref([]);
+  const evaluadores = ref([]);
   const centrales = ref([]);
 
   const filtros = ref({
@@ -13,6 +14,7 @@ export function useIncidentes() {
     area_operativa: '',
     central: '',
     tecnico: '',
+    evaluador: '',
     estatus: ''
   });
 
@@ -50,11 +52,12 @@ export function useIncidentes() {
     return [...new Set(areas)];
   });
 
-  // 1. CARGA DE CATÁLOGOS
+  // 1. CARGA DE CATÁLOGOS (Incluye Evaluadores PI)
   const cargarCatalogos = async () => {
     try {
-      const [resTec, resCen] = await Promise.all([
+      const [resTec, resEval, resCen] = await Promise.all([
         getTecnicos().catch(err => { console.warn('Error getTecnicos:', err); return null; }),
+        getEvaluadores().catch(err => { console.warn('Error getEvaluadores:', err); return null; }),
         getCentrales().catch(err => { console.warn('Error getCentrales:', err); return null; })
       ]);
 
@@ -69,6 +72,17 @@ export function useIncidentes() {
         tecnicos.value = [];
       }
 
+      if (resEval) {
+        const rawData = resEval.data?.results || resEval.data || resEval || [];
+        const lista = Array.isArray(rawData) ? rawData : [];
+        evaluadores.value = lista.map(u => ({
+          id: u.id || u.pk || u.user_id,
+          nombre: `${u.first_name || ''} ${u.last_name || ''}`.trim() || u.username || u.nombre || `Evaluador ${u.id}`
+        })).filter(e => e.id !== undefined);
+      } else {
+        evaluadores.value = [];
+      }
+
       if (resCen) {
         const rawData = resCen.data?.results || resCen.data || resCen || [];
         centrales.value = Array.isArray(rawData) ? rawData : [];
@@ -80,7 +94,7 @@ export function useIncidentes() {
     }
   };
 
-  // 2. CARGA DE INCIDENTES CON ENRIQUECIMIENTO DE TÉCNICOS
+  // 2. CARGA DE INCIDENTES CON ENRIQUECIMIENTO DE TÉCNICOS Y EVALUADORES
   const cargarIncidentes = async () => {
     cargando.value = true;
     try {
@@ -89,6 +103,7 @@ export function useIncidentes() {
       if (filtros.value.area_operativa) params.area_operativa = filtros.value.area_operativa;
       if (filtros.value.central) params.central = filtros.value.central;
       if (filtros.value.tecnico) params.tecnico = filtros.value.tecnico; 
+      if (filtros.value.evaluador) params.evaluador = filtros.value.evaluador; 
       if (filtros.value.estatus) params.estatus_io = filtros.value.estatus;
 
       const res = await getIncidentes(params);
@@ -97,7 +112,6 @@ export function useIncidentes() {
 
       incidentes.value = lista.map(inc => {
         let nombreTecnico = inc.tecnico_nombre;
-
         if (!nombreTecnico) {
           if (typeof inc.tecnico === 'object' && inc.tecnico) {
             nombreTecnico = inc.tecnico.first_name || inc.tecnico.nombre || inc.tecnico.username;
@@ -107,9 +121,20 @@ export function useIncidentes() {
           }
         }
 
+        let nombreEvaluador = inc.evaluador_nombre;
+        if (!nombreEvaluador) {
+          if (typeof inc.evaluador === 'object' && inc.evaluador) {
+            nombreEvaluador = inc.evaluador.first_name || inc.evaluador.nombre || inc.evaluador.username;
+          } else if (inc.evaluador) {
+            const match = evaluadores.value.find(e => Number(e.id) === Number(inc.evaluador));
+            if (match) nombreEvaluador = match.nombre;
+          }
+        }
+
         return {
           ...inc,
-          tecnico_nombre: nombreTecnico || 'Sin Asignar'
+          tecnico_nombre: nombreTecnico || 'Sin Asignar',
+          evaluador_nombre: nombreEvaluador || 'Sin Asignar'
         };
       });
 
@@ -150,7 +175,7 @@ export function useIncidentes() {
   });
 
   return {
-    cargando, incidentes, tecnicos, centrales, filtros, areasDisponibles,
+    cargando, incidentes, tecnicos, evaluadores, centrales, filtros, areasDisponibles,
     kpiTotal, kpiDilacion, columnasKanban,
     cargarCatalogos, cargarIncidentes, normalizarEstatus
   };

@@ -3,9 +3,10 @@ from django.db import models
 
 class UsuarioGIO(AbstractUser):
     ROLES = (
-        ('PI', 'Planta Interna (OQU)'),
-        ('PE', 'Planta Externa (Técnico)'),
-        ('ADMIN', 'Jefatura / Administración'),
+        ('TECNICO', 'Planta Externa (Técnico)'),
+        ('PI_EVALUADOR', 'Planta Interna (Evaluador / Rango Bajo)'),
+        ('PI_SUB', 'Planta Interna (Subgerencia)'),
+        ('ADMIN', 'Gerencia / Administración'),
     )
 
     AREAS = (
@@ -20,10 +21,9 @@ class UsuarioGIO(AbstractUser):
     )
 
     expediente = models.CharField(max_length=20, unique=True, help_text="Expediente TELMEX (Ej. OQU-8821)")
-    rol = models.CharField(max_length=10, choices=ROLES, default='PI')
+    rol = models.CharField(max_length=15, choices=ROLES, default='PI_EVALUADOR')
     area_operativa = models.CharField(max_length=50, choices=AREAS, blank=True, null=True)
 
-    # Configuramos el 'expediente' como el campo principal para iniciar sesión
     USERNAME_FIELD = 'expediente'
     REQUIRED_FIELDS = ['username', 'email']
 

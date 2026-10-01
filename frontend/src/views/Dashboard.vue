@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted } from 'vue';
 import { createIncidente, updateIncidente } from '../services/api';
 import { useIncidentes } from '../composables/useIncidentes';
 import { useAuth } from '../composables/useAuth';
@@ -7,9 +7,13 @@ import KanbanBoard from '../components/KanbanBoard.vue';
 import TablaIncidentes from '../components/TablaIncidentes.vue';
 import IncidenteModal from '../components/IncidenteModal.vue';
 
-const { usuario, cerrarSesion } = useAuth();
-const esAdmin = computed(() => usuario.value?.rol === 'ADMIN' || usuario.value?.is_superuser);
-const esTecnico = computed(() => usuario.value?.rol === 'TECNICO');
+const { 
+  usuario, 
+  cerrarSesion, 
+  esTecnico, 
+  esGerencia, 
+  puedeCrearFolio 
+} = useAuth();
 
 const vista = ref('kanban');
 const mostrarFormulario = ref(false);
@@ -24,6 +28,7 @@ const formInicial = {
   area_operativa: '', 
   central: '', 
   tecnico: null, 
+  evaluador: null,
   estatus_io: 'ABIERTO',
   estatus_qp: 'DESCONOCIDO',
   dilacion_dias: 0, 
@@ -43,13 +48,13 @@ const formInicial = {
 const formActual = ref({ ...formInicial });
 
 const { 
-  cargando, incidentes, tecnicos, centrales, filtros, areasDisponibles,
+  cargando, incidentes, tecnicos, evaluadores, centrales, filtros, areasDisponibles,
   kpiTotal, kpiDilacion, columnasKanban, cargarCatalogos, cargarIncidentes 
 } = useIncidentes();
 
 onMounted(async () => {
-   if (esTecnico.value && usuario.value?.id) {
-     filtros.value.tecnico = usuario.value.id;
+  if (esTecnico.value && usuario.value?.id) {
+    filtros.value.tecnico = usuario.value.id;
   }
   await cargarCatalogos();
   await cargarIncidentes();
@@ -69,12 +74,20 @@ const abrirEditar = (inc) => {
     tecnicoId = inc.tecnico;
   }
 
+  let evaluadorId = null;
+  if (inc.evaluador && typeof inc.evaluador === 'object') {
+    evaluadorId = inc.evaluador.id;
+  } else if (inc.evaluador) {
+    evaluadorId = inc.evaluador;
+  }
+
   formActual.value = { 
     ...formInicial, 
     ...inc,
     area_operativa: String(inc.area_operativa || inc.area || '').toUpperCase().trim(),
     dilacion_dias: inc.dilacion_dias || inc.dilacion || 0,
     tecnico: tecnicoId,
+    evaluador: evaluadorId,
     dir_pta_a: inc.dir_pta_a || inc.direccion || '',
     ips: inc.ips || inc.ip_servicio || '',
     estatus_io: inc.estatus_io || 'ABIERTO',
@@ -91,6 +104,13 @@ const procesarGuardado = async (payload) => {
       tecnicoAsignado = payload.tecnico.id;
     } else if (payload.tecnico) {
       tecnicoAsignado = parseInt(payload.tecnico, 10);
+    }
+
+    let evaluadorAsignado = null;
+    if (payload.evaluador && typeof payload.evaluador === 'object') {
+      evaluadorAsignado = payload.evaluador.id;
+    } else if (payload.evaluador) {
+      evaluadorAsignado = parseInt(payload.evaluador, 10);
     }
     
     const datosEnvio = {
@@ -114,7 +134,8 @@ const procesarGuardado = async (payload) => {
       estatus_io: payload.estatus_io || 'ABIERTO',
       estatus_qp: payload.estatus_qp || '',
       obs_usuario: payload.obs_usuario || '',
-      tecnico: Number.isInteger(tecnicoAsignado) && tecnicoAsignado > 0 ? tecnicoAsignado : null
+      tecnico: Number.isInteger(tecnicoAsignado) && tecnicoAsignado > 0 ? tecnicoAsignado : null,
+      evaluador: Number.isInteger(evaluadorAsignado) && evaluadorAsignado > 0 ? evaluadorAsignado : null
     };
 
     if (editando.value) {
@@ -137,7 +158,7 @@ const exportarCSV = () => {
     alert('No hay datos disponibles para exportar.');
     return;
   }
-  const cabeceras = ['Folio', 'Empresa', 'Referencia', 'Tipo Servicio', 'Area Operativa', 'Central', 'Tecnico', 'Estatus IO', 'Estado Enlace', 'Dilacion Dias', 'Direccion', 'IP'];
+  const cabeceras = ['Folio', 'Empresa', 'Referencia', 'Tipo Servicio', 'Area Operativa', 'Central', 'Técnico', 'Evaluador', 'Estatus IO', 'Estado Enlace', 'Dilación Días', 'Dirección', 'IP'];
   const filas = incidentes.value.map(inc => [
     `"${inc.folio || ''}"`,
     `"${inc.empresa || ''}"`,
@@ -146,6 +167,7 @@ const exportarCSV = () => {
     `"${inc.area_operativa || ''}"`,
     `"${inc.central || ''}"`,
     `"${inc.tecnico_nombre || inc.tecnico?.username || inc.tecnico || ''}"`,
+    `"${inc.evaluador_nombre || inc.evaluador?.username || inc.evaluador || ''}"`,
     `"${inc.estatus_io || ''}"`,
     `"${inc.estatus_qp || ''}"`,
     inc.dilacion_dias || 0,
@@ -161,13 +183,14 @@ const exportarCSV = () => {
   link.click();
   document.body.removeChild(link);
 };
+
 let timerBusqueda = null;
 
 const onFolioInput = () => {
   clearTimeout(timerBusqueda);
   timerBusqueda = setTimeout(() => {
     cargarIncidentes();
-  }, 350); // Ejecuta la búsqueda 350ms después de que el usuario deja de escribir
+  }, 350);
 };
 
 const limpiarFolio = () => {
@@ -183,24 +206,26 @@ const limpiarFolio = () => {
         <div class="logo-badge">GIO</div>
         <h1 class="system-title">SISTEMA DE GESTIÓN DE INCIDENCIAS</h1>
         
-        <!-- Indicador de Usuario y Rol -->
         <div class="user-chip" v-if="usuario">
-          <span>👤 {{ usuario.nombre || usuario.username }}</span>
-          <span class="role-tag">{{ usuario.rol || 'ADMIN' }}</span>
+          <span>👤 {{ usuario.nombre || usuario.username || usuario.expediente }}</span>
+          <span class="role-tag">{{ usuario.rol || 'Sin indentificar' }}</span>
         </div>
       </div>
-
+      <!--BOTONES DE DIFERENCIACION DE LOS ROLES ENTRE SUBGERENCIA-GERENCIA Y EVALUADORES DE PLANTA INTERNA Y TECNICOS DE PLANTA EXTERNA-->>
       <div class="header-right">
-        <!-- Oculto para Rol TÉCNICO -->
-        <button v-if="!esTecnico" @click="abrirNuevo" class="btn btn-primary-gio">
+        <!-- Permitido para Subgerencia y Gerencia -->
+        <button v-if="puedeCrearFolio" @click="abrirNuevo" class="btn btn-primary-gio">
           + Nuevo Folio
         </button>
         
-        <!-- Exclusivo para Rol ADMIN -->
-        <button v-if="esAdmin" @click="exportarCSV" class="btn btn-primary-gio">
+        <!-- Exclusivo para Gerencia -->
+        <button v-if="esGerencia" @click="exportarCSV" class="btn btn-primary-gio">
           - Exportar Reporte
         </button>
 
+        <button @click="cerrarSesion" class="btn btn-logout ms-2">
+          Cerrar Sesión
+        </button>
       </div>
     </header>
 
@@ -219,12 +244,10 @@ const limpiarFolio = () => {
         </div>
       </section>
 
-            <!-- BARRA UNIFICADA DE FILTROS -->
       <section class="filter-bar">
         <div class="filters-left">
           <span class="filter-label">Buscar:</span>
           
-          <!-- NUEVA BARRA DE BÚSQUEDA POR FOLIO -->
           <div class="search-box">
             <span class="search-icon"></span>
             <input 
@@ -279,7 +302,6 @@ const limpiarFolio = () => {
       </section>
 
       <section v-if="cargando" class="loading-state">
-         
       </section>
 
       <KanbanBoard 
@@ -295,11 +317,11 @@ const limpiarFolio = () => {
       />
     </main>
 
-    <!-- Pasa tecnicos y centrales al Modal -->
     <IncidenteModal 
       v-if="mostrarFormulario"
       :centrales="centrales" 
       :tecnicos="tecnicos"
+      :evaluadores="evaluadores"
       :areas="areasDisponibles"
       :editando="editando" 
       :modelo="formActual" 
@@ -310,7 +332,6 @@ const limpiarFolio = () => {
 </template>
 
 <style scoped>
-/* Estilos adicionales sugeridos para la cabecera de autenticación */
 .dashboard-container {
   width: 100%;
   max-width: 100%;
@@ -318,25 +339,22 @@ const limpiarFolio = () => {
   box-sizing: border-box;
 }
 
-/* Header flexible */
 .dashboard-header {
   display: flex;
-  flex-wrap: wrap; /* Permite que los elementos bajen de línea en móvil */
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: center;
   gap: 1rem;
   width: 100%;
 }
 
-/* Grid de métricas / tarjetas KPI */
 .metrics-grid, .stats-container {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); /* Adaptable */
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   gap: 1rem;
   width: 100%;
 }
 
-/* Barra de filtros y búsquedas */
 .filters-bar {
   display: flex;
   flex-wrap: wrap;
@@ -355,6 +373,7 @@ const limpiarFolio = () => {
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
 }
+
 .user-chip {
   display: flex;
   align-items: center;
@@ -367,6 +386,7 @@ const limpiarFolio = () => {
   color: #e2e8f0;
   margin-left: 1rem;
 }
+
 .role-tag {
   background-color: #2563eb;
   color: #ffffff;
@@ -375,6 +395,7 @@ const limpiarFolio = () => {
   border-radius: 4px;
   font-weight: 700;
 }
+
 .btn-logout {
   background-color: #ef4444;
   color: white;
@@ -385,9 +406,11 @@ const limpiarFolio = () => {
   font-weight: 600;
   transition: background-color 0.2s;
 }
+
 .btn-logout:hover {
   background-color: #dc2626;
 }
+
 .search-box {
   position: relative;
   display: flex;

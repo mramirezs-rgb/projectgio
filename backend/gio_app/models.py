@@ -1,6 +1,7 @@
 from django.db import models
 from django.conf import settings
 
+
 class Incidente(models.Model):
     id = models.BigAutoField(primary_key=True)
     incidente = models.CharField(max_length=50, blank=True, null=True)
@@ -21,6 +22,8 @@ class Incidente(models.Model):
     desc_cod4 = models.CharField(max_length=255, blank=True, null=True)
     desc_carls = models.CharField(max_length=255, blank=True, null=True)
     desc_cod5 = models.CharField(max_length=255, blank=True, null=True)
+    
+    # Técnico asignado
     tecnico = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
@@ -28,6 +31,17 @@ class Incidente(models.Model):
         blank=True,
         related_name='incidentes_asignados'
     )
+    
+    # NUEVO: Evaluador de Planta Interna asignado
+    evaluador = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='incidentes_evaluados',
+        db_column='evaluador_id'
+    )
+
     telefono_tecnico = models.CharField(max_length=20, blank=True, null=True)
     ips = models.CharField(max_length=50, blank=True, null=True)
     fecha_ingreso = models.DateTimeField(blank=True, null=True)
@@ -48,7 +62,7 @@ class Incidente(models.Model):
     actualizado_en = models.DateTimeField(blank=True, null=True)
 
     class Meta:
-        managed = False  # Si quieres que Django administre la creación/migración de esta tabla en PostgreSQL, cambia esto a True
+        managed = False  # IMPORTANTE: Revisa la nota abajo
         db_table = 'incidentes_red'
         ordering = ['-id']
 

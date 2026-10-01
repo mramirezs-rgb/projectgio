@@ -8,6 +8,7 @@ class IncidenteSerializer(serializers.ModelSerializer):
     central_nombre = serializers.ReadOnlyField(source='central')
     
     tecnico_nombre = serializers.SerializerMethodField()
+    evaluador_nombre = serializers.SerializerMethodField()
 
     class Meta:
         model = Incidente
@@ -23,5 +24,18 @@ class IncidenteSerializer(serializers.ModelSerializer):
             return nombre
         elif getattr(obj.tecnico, 'username', None):
             return obj.tecnico.username
+        else:
+            return "Sin Asignar"
+
+    def get_evaluador_nombre(self, obj):
+        if not obj.evaluador:
+            return "Sin Asignar"
+        
+        nombre = f"{getattr(obj.evaluador, 'first_name', '')} {getattr(obj.evaluador, 'last_name', '')}".strip()
+        
+        if nombre:
+            return nombre
+        elif getattr(obj.evaluador, 'username', None):
+            return obj.evaluador.username
         else:
             return "Sin Asignar"
