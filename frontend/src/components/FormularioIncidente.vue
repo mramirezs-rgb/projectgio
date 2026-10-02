@@ -1,24 +1,20 @@
 <script setup>
 import { ref, watch } from 'vue';
 import { createIncidente, updateIncidente } from '../services/api';
-
 const props = defineProps({
   incidenteEditar: Object,
   tecnicos: Array,
   centrales: Array,
   mostrar: Boolean
 });
-
 const emit = defineEmits(['cerrar', 'recargar']);
-
+//Base de la estructura inicial de el formulario de datos del modal
 const formInicial = {
   id: null, folio: '', empresa: '', incidente: '', referencia: '',
   area_operativa: '', central: '', tecnico_asignado: '', 
   tipo_servicio: '', estatus_io: 'PENDIENTE', dilacion_dias: 0, obs_usuario: ''
 };
-
 const form = ref({ ...formInicial });
-
 // Sincronizar datos al abrir para editar
 watch(() => props.incidenteEditar, (nuevoVal) => {
   if (nuevoVal) {
@@ -27,30 +23,27 @@ watch(() => props.incidenteEditar, (nuevoVal) => {
     form.value = { ...formInicial };
   }
 }, { immediate: true });
-
+//Función pra guardar la informacion de los campos. 
 const guardar = async () => {
   try {
-    // CORRECCIÓN: Nombres exactos de PostgreSQL
     const payload = {
       folio: form.value.folio,
       empresa: form.value.empresa,
       incidente: form.value.incidente,
       referencia: form.value.referencia,
-      area_operativa: form.value.area_operativa, // Corregido
-      central: form.value.central,               // Guardado como texto
-      tecnico_asignado: form.value.tecnico_asignado, // Corregido: texto, no número
+      area_operativa: form.value.area_operativa,
+      central: form.value.central,
+      tecnico_asignado: form.value.tecnico_asignado,
       estatus_io: form.value.estatus_io,
       tipo_servicio: form.value.tipo_servicio,
       dilacion_dias: Number(form.value.dilacion_dias) || 0,
       obs_usuario: form.value.obs_usuario
     };
-
     if (form.value.id) {
       await updateIncidente(form.value.id, payload);
     } else {
       await createIncidente(payload);
     }
-
     emit('recargar');
     emit('cerrar');
   } catch (error) {
@@ -58,7 +51,6 @@ const guardar = async () => {
   }
 };
 </script>
-
 <template>
   <div v-if="mostrar" class="modal-overlay">
     <div class="modal-box shadow-xl">
@@ -66,7 +58,6 @@ const guardar = async () => {
         <h2>{{ form.id ? 'Editar Folio: ' + form.folio : 'Nuevo Folio' }}</h2>
         <button @click="emit('cerrar')" class="btn-close">✕</button>
       </div>
-
       <form @submit.prevent="guardar" class="modal-form">
         <div class="form-row-3">
           <div class="form-group">
@@ -82,7 +73,6 @@ const guardar = async () => {
             <input v-model="form.empresa" type="text" class="form-control" />
           </div>
         </div>
-
         <div class="form-row-2">
           <div class="form-group">
             <label>Técnico Asignado</label>
@@ -102,8 +92,7 @@ const guardar = async () => {
               <option value="CERRADO">CERRADO</option>
             </select>
           </div>
-        </div>
-        
+        </div>        
         <div class="modal-footer">
           <button type="button" @click="emit('cerrar')" class="btn-cancel">Cancelar</button>
           <button type="submit" class="btn-submit">Guardar</button>

@@ -6,7 +6,6 @@ import { useAuth } from '../composables/useAuth';
 import KanbanBoard from '../components/KanbanBoard.vue';
 import TablaIncidentes from '../components/TablaIncidentes.vue';
 import IncidenteModal from '../components/IncidenteModal.vue';
-
 const { 
   usuario, 
   cerrarSesion, 
@@ -14,11 +13,9 @@ const {
   esGerencia, 
   puedeCrearFolio 
 } = useAuth();
-
 const vista = ref('kanban');
 const mostrarFormulario = ref(false);
 const editando = ref(false);
-
 const formInicial = { 
   id: null, 
   folio: '', 
@@ -44,14 +41,11 @@ const formInicial = {
   desc_liq: '',           
   obs_usuario: ''
 };
-
 const formActual = ref({ ...formInicial });
-
 const { 
   cargando, incidentes, tecnicos, evaluadores, centrales, filtros, areasDisponibles,
   kpiTotal, kpiDilacion, columnasKanban, cargarCatalogos, cargarIncidentes 
 } = useIncidentes();
-
 onMounted(async () => {
   if (esTecnico.value && usuario.value?.id) {
     filtros.value.tecnico = usuario.value.id;
@@ -59,13 +53,11 @@ onMounted(async () => {
   await cargarCatalogos();
   await cargarIncidentes();
 });
-
 const abrirNuevo = () => {
   formActual.value = { ...formInicial };
   editando.value = false;
   mostrarFormulario.value = true;
 };
-
 const abrirEditar = (inc) => {
   let tecnicoId = null;
   if (inc.tecnico && typeof inc.tecnico === 'object') {
@@ -73,14 +65,12 @@ const abrirEditar = (inc) => {
   } else if (inc.tecnico) {
     tecnicoId = inc.tecnico;
   }
-
   let evaluadorId = null;
   if (inc.evaluador && typeof inc.evaluador === 'object') {
     evaluadorId = inc.evaluador.id;
   } else if (inc.evaluador) {
     evaluadorId = inc.evaluador;
   }
-
   formActual.value = { 
     ...formInicial, 
     ...inc,
@@ -96,7 +86,6 @@ const abrirEditar = (inc) => {
   editando.value = true;
   mostrarFormulario.value = true;
 };
-
 const procesarGuardado = async (payload) => {
   try {
     let tecnicoAsignado = null;
@@ -105,14 +94,12 @@ const procesarGuardado = async (payload) => {
     } else if (payload.tecnico) {
       tecnicoAsignado = parseInt(payload.tecnico, 10);
     }
-
     let evaluadorAsignado = null;
     if (payload.evaluador && typeof payload.evaluador === 'object') {
       evaluadorAsignado = payload.evaluador.id;
     } else if (payload.evaluador) {
       evaluadorAsignado = parseInt(payload.evaluador, 10);
     }
-    
     const datosEnvio = {
       folio: payload.folio,
       empresa: payload.empresa || '',
@@ -137,7 +124,6 @@ const procesarGuardado = async (payload) => {
       tecnico: Number.isInteger(tecnicoAsignado) && tecnicoAsignado > 0 ? tecnicoAsignado : null,
       evaluador: Number.isInteger(evaluadorAsignado) && evaluadorAsignado > 0 ? evaluadorAsignado : null
     };
-
     if (editando.value) {
       await updateIncidente(payload.id, datosEnvio);
     } else {
@@ -152,12 +138,10 @@ const procesarGuardado = async (payload) => {
     alert(`No se pudo guardar. Verifica los datos.\nDetalle: ${detalleError}`);
   }
 };
-
 const exportarCSV = () => {
   if (incidentes.value.length === 0) {
     alert('No hay datos disponibles para exportar.');
-    return;
-  }
+    return;}
   const cabeceras = ['Folio', 'Empresa', 'Referencia', 'Tipo Servicio', 'Area Operativa', 'Central', 'Técnico', 'Evaluador', 'Estatus IO', 'Estado Enlace', 'Dilación Días', 'Dirección', 'IP'];
   const filas = incidentes.value.map(inc => [
     `"${inc.folio || ''}"`,
@@ -183,52 +167,38 @@ const exportarCSV = () => {
   link.click();
   document.body.removeChild(link);
 };
-
 let timerBusqueda = null;
-
 const onFolioInput = () => {
   clearTimeout(timerBusqueda);
   timerBusqueda = setTimeout(() => {
     cargarIncidentes();
   }, 350);
 };
-
 const limpiarFolio = () => {
   filtros.value.folio = '';
   cargarIncidentes();
 };
 </script>
-
 <template>
   <div class="gio-app">
     <header class="top-bar">
       <div class="brand-group">
         <div class="logo-badge">GIO</div>
         <h1 class="system-title">SISTEMA DE GESTIÓN DE INCIDENCIAS</h1>
-        
         <div class="user-chip" v-if="usuario">
-          <span>👤 {{ usuario.nombre || usuario.username || usuario.expediente }}</span>
+          <span>USUARIO: {{ usuario.nombre || usuario.username }}</span>
           <span class="role-tag">{{ usuario.rol || 'Sin indentificar' }}</span>
         </div>
       </div>
-      <!--BOTONES DE DIFERENCIACION DE LOS ROLES ENTRE SUBGERENCIA-GERENCIA Y EVALUADORES DE PLANTA INTERNA Y TECNICOS DE PLANTA EXTERNA-->>
       <div class="header-right">
-        <!-- Permitido para Subgerencia y Gerencia -->
         <button v-if="puedeCrearFolio" @click="abrirNuevo" class="btn btn-primary-gio">
           + Nuevo Folio
-        </button>
-        
-        <!-- Exclusivo para Gerencia -->
+        </button>        
         <button v-if="esGerencia" @click="exportarCSV" class="btn btn-primary-gio">
           - Exportar Reporte
         </button>
-
-        <button @click="cerrarSesion" class="btn btn-logout ms-2">
-          Cerrar Sesión
-        </button>
       </div>
     </header>
-
     <main class="dashboard-body">
       <section class="kpi-grid">
         <div class="kpi-card">
@@ -243,11 +213,9 @@ const limpiarFolio = () => {
           <div class="kpi-value red-text">{{ kpiDilacion }}</div>
         </div>
       </section>
-
       <section class="filter-bar">
         <div class="filters-left">
-          <span class="filter-label">Buscar:</span>
-          
+          <span class="filter-label">Buscar:</span>          
           <div class="search-box">
             <span class="search-icon"></span>
             <input 
@@ -264,27 +232,22 @@ const limpiarFolio = () => {
               class="btn-clear-folio" 
               type="button"
             >
-              ✕
+              ✕ Cerrar
             </button>
           </div>
-
           <span class="filter-label ms-2">Filtrar:</span>
-
           <select v-model="filtros.area_operativa" @change="cargarIncidentes" class="filter-select">
             <option value="">Área: Todas</option>
             <option v-for="area in areasDisponibles" :key="area" :value="area">{{ area }}</option>
           </select>
-
           <select v-model="filtros.central" @change="cargarIncidentes" class="filter-select">
             <option value="">COPE: Todos</option>
             <option v-for="c in centrales" :key="c.id" :value="c.nombre">{{ c.nombre }}</option>
           </select>
-
           <select v-if="!esTecnico" v-model="filtros.tecnico" @change="cargarIncidentes" class="filter-select">
             <option value="">Técnico: Todos</option>
             <option v-for="t in tecnicos" :key="t.id" :value="t.id">{{ t.nombre }}</option>
           </select>
-
           <select v-model="filtros.estatus" @change="cargarIncidentes" class="filter-select">
             <option value="">Estado: Todos</option>
             <option value="ABIERTO">Abierto</option>
@@ -293,30 +256,25 @@ const limpiarFolio = () => {
             <option value="RESUELTO">Resuelto</option>
             <option value="CERRADO">Cerrado</option>
           </select>
-        </div>
-        
+        </div>        
         <div class="view-toggle">
           <button @click="vista = 'tabla'" :class="['toggle-btn', { active: vista === 'tabla' }]">Tabla</button>
           <button @click="vista = 'kanban'" :class="['toggle-btn', { active: vista === 'kanban' }]">Kanban</button>
         </div>
       </section>
-
       <section v-if="cargando" class="loading-state">
       </section>
-
       <KanbanBoard 
         v-else-if="vista === 'kanban'" 
         :columnas="columnasKanban" 
         @editar="abrirEditar"
       />
-
       <TablaIncidentes 
         v-else 
         :incidentes="incidentes" 
         @editar="abrirEditar"
       />
     </main>
-
     <IncidenteModal 
       v-if="mostrarFormulario"
       :centrales="centrales" 
@@ -330,7 +288,6 @@ const limpiarFolio = () => {
     />
   </div>
 </template>
-
 <style scoped>
 .dashboard-container {
   width: 100%;
@@ -338,7 +295,6 @@ const limpiarFolio = () => {
   padding: 1rem;
   box-sizing: border-box;
 }
-
 .dashboard-header {
   display: flex;
   flex-wrap: wrap;
@@ -347,33 +303,28 @@ const limpiarFolio = () => {
   gap: 1rem;
   width: 100%;
 }
-
 .metrics-grid, .stats-container {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   gap: 1rem;
   width: 100%;
 }
-
 .filters-bar {
   display: flex;
   flex-wrap: wrap;
   gap: 0.75rem;
   width: 100%;
 }
-
 .filters-bar input,
 .filters-bar select {
   flex: 1 1 200px;
   min-width: 0; 
 }
-
 .kanban-wrapper, .tabla-wrapper {
   width: 100%;
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
 }
-
 .user-chip {
   display: flex;
   align-items: center;
@@ -386,7 +337,6 @@ const limpiarFolio = () => {
   color: #e2e8f0;
   margin-left: 1rem;
 }
-
 .role-tag {
   background-color: #2563eb;
   color: #ffffff;
@@ -395,7 +345,6 @@ const limpiarFolio = () => {
   border-radius: 4px;
   font-weight: 700;
 }
-
 .btn-logout {
   background-color: #ef4444;
   color: white;
@@ -406,17 +355,14 @@ const limpiarFolio = () => {
   font-weight: 600;
   transition: background-color 0.2s;
 }
-
 .btn-logout:hover {
   background-color: #dc2626;
 }
-
 .search-box {
   position: relative;
   display: flex;
   align-items: center;
 }
-
 .search-icon {
   position: absolute;
   left: 8px;
@@ -424,7 +370,6 @@ const limpiarFolio = () => {
   pointer-events: none;
   opacity: 0.6;
 }
-
 .filter-input {
   padding: 0.4rem 1.8rem 0.4rem 1.8rem;
   border-radius: 6px;
@@ -436,12 +381,10 @@ const limpiarFolio = () => {
   width: 180px;
   transition: border-color 0.2s, width 0.2s;
 }
-
 .filter-input:focus {
   border-color: #2563eb;
   width: 220px;
 }
-
 .btn-clear-folio {
   position: absolute;
   right: 6px;
@@ -452,15 +395,12 @@ const limpiarFolio = () => {
   font-size: 0.75rem;
   padding: 2px 4px;
 }
-
 .btn-clear-folio:hover {
   color: #f8fafc;
 }
-
 .ms-2 {
   margin-left: 0.75rem;
 }
-
 @media (max-width: 768px) {
   .header-container,
   .top-bar,

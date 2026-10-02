@@ -70,10 +70,10 @@ watch(
     if (copia.estatus_io) {
       copia.estatus_io = String(copia.estatus_io).toUpperCase().trim();
     }
+    //Normaliza Estatus q/p
     if (copia.estatus_qp || copia.estado_enlace) {
       copia.estatus_qp = String(copia.estatus_qp || copia.estado_enlace).toUpperCase().trim();
     }
-    
     // Normalizar Técnico
     if (copia.tecnico && typeof copia.tecnico === 'object') {
       copia.tecnico = Number(copia.tecnico.id);
@@ -82,7 +82,6 @@ watch(
     } else {
       copia.tecnico = null;
     }
-
     // Normalizar Evaluador
     if (copia.evaluador && typeof copia.evaluador === 'object') {
       copia.evaluador = Number(copia.evaluador.id);
@@ -91,12 +90,10 @@ watch(
     } else {
       copia.evaluador = null;
     }
-
     form.value = copia;
   },
   { deep: true, immediate: true }
 );
-
 const guardar = () => {
   const payload = { ...form.value };
   if (payload.area_operativa) {
@@ -104,12 +101,10 @@ const guardar = () => {
   }
   emit('save', payload);
 };
-
 const cerrar = () => {
   emit('close');
 };
 </script>
-
 <template>
   <div class="modal-overlay" @click.self="cerrar">
     <div class="modal-container">
@@ -180,7 +175,6 @@ const cerrar = () => {
               </option>
             </select>
           </div>
-
           <div class="form-group">
             <label>COPE / Central *</label>
             <select v-model="form.central" required>
@@ -199,7 +193,6 @@ const cerrar = () => {
               </option>
             </select>
           </div>
-          
           <div class="form-group">
             <label>Evaluador Asignado (PI)</label>
             <select v-model="form.evaluador">
@@ -209,7 +202,6 @@ const cerrar = () => {
               </option>
             </select>
           </div>
-
           <div class="form-group">
             <label>Estatus I/O</label>
             <select v-model="form.estatus_io">
@@ -225,7 +217,6 @@ const cerrar = () => {
             <input v-model.number="form.dilacion_dias" type="number" min="0" />
           </div>
         </div>
-
         <!-- PESTAÑA 2: TÉCNICOS -->
         <div v-show="tabActiva === 'tecnico'" class="form-grid">
           <div class="form-group full-width">
@@ -253,7 +244,6 @@ const cerrar = () => {
             </select>
           </div>
         </div>
-
         <!-- PESTAÑA 3: SISA -->
         <div v-show="tabActiva === 'sisa'" class="form-grid">
           <div class="form-group">
@@ -285,7 +275,6 @@ const cerrar = () => {
             <textarea v-model="form.obs_usuario" rows="3" placeholder="Ingresa notas técnicas adicionales..."></textarea>
           </div>
         </div>
-
         <footer class="modal-footer">
           <button type="button" class="btn btn-secondary" @click="cerrar">Cancelar</button>
           <button type="submit" class="btn btn-primary-gio">
@@ -296,7 +285,6 @@ const cerrar = () => {
     </div>
   </div>
 </template>
-
 <style scoped>
 /* Los estilos se mantienen exactamente igual a como los tenías */
 .modal-overlay {
