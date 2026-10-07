@@ -7,14 +7,16 @@ const api = axios.create({
     'Content-Type': 'application/json'
   }
 });
-// Interceptor para inyectar Token JWT
-api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('gio_token');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
-});
+api.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem('gio_token') || sessionStorage.getItem('gio_token');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
 export const loginApi = (credentials) => api.post('/auth/login/', credentials);
 export const getIncidentes = (params) => api.get('/incidentes/', { params });
 export const getTecnicos = () => api.get('/tecnicos/');

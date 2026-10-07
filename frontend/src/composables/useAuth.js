@@ -25,7 +25,6 @@ export function useAuth() {
         password: password
       });
       const tokenRecibido = response.data.access || response.data.token || response.data.key;
-      // Fallback seguro: Si el backend no envía rol, asignamos el de menor nivel.
       const datosUsuario = response.data.user || response.data.usuario || { 
         id: null,
         expediente, 

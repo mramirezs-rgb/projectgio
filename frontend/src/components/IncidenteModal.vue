@@ -46,7 +46,6 @@ const listaAreasBase = [
   'COATZACOALCOS'
 ];
 
-// Unifica áreas base + áreas recibidas del backend/CSV + área actual del registro
 const todasLasAreas = computed(() => {
   const conjunto = new Set([...listaAreasBase, ...props.areas]);
   if (form.value.area_operativa) {
@@ -286,7 +285,8 @@ const cerrar = () => {
   </div>
 </template>
 <style scoped>
-/* Los estilos se mantienen exactamente igual a como los tenías */
+
+
 .modal-overlay {
   position: fixed;
   top: 0;

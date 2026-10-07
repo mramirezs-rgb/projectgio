@@ -7,10 +7,9 @@ import KanbanBoard from '../components/KanbanBoard.vue';
 import TablaIncidentes from '../components/TablaIncidentes.vue';
 import IncidenteModal from '../components/IncidenteModal.vue';
 import '../assets/dashboardstyle.css'
-
+import { mostrarExito, mostrarError } from '../utils/alerts.js';
 const { 
   usuario, 
-  cerrarSesion, 
   esTecnico, 
   esGerencia, 
   puedeCrearFolio 
@@ -133,9 +132,9 @@ const procesarGuardado = async (payload) => {
     }
     mostrarFormulario.value = false;
     await cargarIncidentes();
-    alert('¡Registro guardado exitosamente!');
+    mostrarExito('¡Folio Actualizado!', 'Los cambios del incidente se guardaron correctamente.');
   } catch (error) {
-    console.error('Error al guardar:', error.response?.data || error);
+    mostrarError('Error de guardado', 'No se pudo conectar con el servidor para guardar los datos.');
     const detalleError = error.response?.data ? JSON.stringify(error.response.data, null, 2) : error.message;
     alert(`No se pudo guardar. Verifica los datos.\nDetalle: ${detalleError}`);
   }
