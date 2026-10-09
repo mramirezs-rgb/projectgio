@@ -127,7 +127,7 @@ else:
             'ENGINE': 'django.db.backends.postgresql',
             'NAME': env('GIO_DB_NAME', 'sistema_gio'),
             'USER': env('GIO_DB_USER', 'postgres'),
-            'PASSWORD': env('GIO_DB_PASSWORD', ''),
+            'PASSWORD': env('GIO_DB_PASSWORD', '123456'),
             'HOST': env('GIO_DB_HOST', 'localhost'),
             'PORT': env('GIO_DB_PORT', '5432'),
             'CONN_MAX_AGE': env_int('GIO_DB_CONN_MAX_AGE', 60),
