@@ -1,0 +1,46 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Backend: Django (depurar)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/backend/manage.py",
+      "args": ["runserver", "--noreload"],
+      "cwd": "${workspaceFolder}/backend",
+      "django": true,
+      "justMyCode": false,
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "Backend: pruebas (depurar)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/backend/manage.py",
+      "args": ["test"],
+      "cwd": "${workspaceFolder}/backend",
+      "django": true,
+      "justMyCode": false,
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "Frontend: depurar en Chrome",
+      "type": "chrome",
+      "request": "launch",
+      "url": "http://localhost:5173",
+      "webRoot": "${workspaceFolder}/frontend/src",
+      "sourceMapPathOverrides": {
+        "webpack:///src/*": "${webRoot}/*",
+        "/src/*": "${webRoot}/*"
+      }
+    }
+  ],
+  "compounds": [
+    {
+      "name": "GIO completo (API + cliente)",
+      "configurations": ["Backend: Django (depurar)", "Frontend: depurar en Chrome"],
+      "preLaunchTask": "Frontend: dev (Vite)",
+      "stopAll": true
+    }
+  ]
+}

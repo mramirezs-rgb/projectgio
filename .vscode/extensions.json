@@ -1,0 +1,11 @@
+{
+  "recommendations": [
+    "Vue.volar",
+    "bradlc.vscode-tailwindcss",
+    "ms-python.python",
+    "ms-python.vscode-pylance",
+    "batisteo.vscode-django",
+    "esbenp.prettier-vscode",
+    "editorconfig.editorconfig"
+  ]
+}

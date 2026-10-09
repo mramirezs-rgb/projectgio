@@ -1,0 +1,28 @@
+{
+  "files.eol": "\n",
+  "files.exclude": {
+    "**/__pycache__": true,
+    "**/node_modules": true,
+    "frontend/dist": true,
+    "frontend/dev-dist": true
+  },
+  "search.exclude": {
+    "**/node_modules": true,
+    "frontend/dist": true,
+    "private_data": true
+  },
+  "editor.formatOnSave": true,
+  "editor.codeActionsOnSave": { "source.organizeImports": "explicit" },
+  "[vue]": { "editor.defaultFormatter": "Vue.volar" },
+  "[javascript]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
+  "[typescript]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
+  "[css]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
+  "[python]": { "editor.defaultFormatter": "ms-python.python" },
+  "python.defaultInterpreterPath": "python",
+  "python.analysis.extraPaths": ["backend"],
+  "python.testing.unittestEnabled": false,
+  "python.testing.pytestEnabled": false,
+  "tailwindCSS.includeLanguages": { "vue": "html" },
+  "tailwindCSS.experimental.configFile": "frontend/src/assets/main.css",
+  "emmet.includeLanguages": { "vue": "html" }
+}
