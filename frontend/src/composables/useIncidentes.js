@@ -1,140 +1,210 @@
-import { ref, computed } from 'vue';
-import { getIncidentes, getTecnicos, getEvaluadores, getCentrales } from '../services/api';
+import { computed, reactive, ref } from 'vue'
+import {
+  getAreas,
+  getCentrales,
+  getEvaluadores,
+  getIncidentes,
+  getMetricas,
+  getTecnicos,
+} from '../services/api.js'
+
+export const ESTATUS = {
+  PENDIENTE: 'PENDIENTE',
+  ASIGNADO: 'ASIGNADO',
+  EN_PROCESO: 'EN_PROCESO',
+  LIQUIDADO: 'LIQUIDADO',
+}
+
+export const COLUMNAS_KANBAN = [
+  { id: ESTATUS.PENDIENTE, titulo: 'Pendiente', color: '#f97316' },
+  { id: ESTATUS.ASIGNADO, titulo: 'Asignado', color: '#3b82f6' },
+  { id: ESTATUS.EN_PROCESO, titulo: 'En proceso', color: '#eab308' },
+  { id: ESTATUS.LIQUIDADO, titulo: 'Liquidado', color: '#10b981' },
+]
+
+export const TRANSICIONES = {
+  [ESTATUS.PENDIENTE]: [ESTATUS.ASIGNADO, ESTATUS.EN_PROCESO],
+  [ESTATUS.ASIGNADO]: [ESTATUS.EN_PROCESO, ESTATUS.PENDIENTE],
+  [ESTATUS.EN_PROCESO]: [ESTATUS.ASIGNADO, ESTATUS.LIQUIDADO],
+  [ESTATUS.LIQUIDADO]: [ESTATUS.EN_PROCESO],
+}
+
+export const etiquetaEstatus = (valor) =>
+  COLUMNAS_KANBAN.find((columna) => columna.id === valor)?.titulo || valor || '—'
+
+const listaDe = (respuesta) => {
+  const datos = respuesta?.data
+  if (Array.isArray(datos)) return datos
+  if (Array.isArray(datos?.results)) return datos.results
+  return []
+}
+
 export function useIncidentes() {
-  const cargando = ref(false);
-  const incidentes = ref([]);
-  const tecnicos = ref([]);
-  const evaluadores = ref([]);
-  const centrales = ref([]);
-  const filtros = ref({
-    folio: '',
+  const cargando = ref(false)
+  const error = ref(null)
+  const incidentes = ref([])
+  const tecnicos = ref([])
+  const evaluadores = ref([])
+  const centrales = ref([])
+  const areas = ref([])
+  const metricas = ref(null)
+
+  const filtros = reactive({
+    search: '',
+    estatus: '',
     area_operativa: '',
     central: '',
     tecnico: '',
     evaluador: '',
-    estatus: ''
-  });
-  const kpiTotal = computed(() => Array.isArray(incidentes.value) ? incidentes.value.length : 0);
-  const kpiDilacion = computed(() => {
-    if (!Array.isArray(incidentes.value)) return 0;
-    return incidentes.value.filter(i => (Number(i.dilacion_dias) || Number(i.dilacion) || 0) > 5).length;
-  });
-  const normalizarEstatus = (inc) => {
-    if (!inc) return 'Abierto';
-    const io = String(inc.estatus_io || inc.estatus || inc.estado || inc.status || '').trim().toUpperCase();
-    const qp = String(inc.estatus_qp || inc.estado_enlace || '').trim().toUpperCase();
-    if (['1', 'UP', 'OPERANDO', 'ATENDIDO', 'RESUELTO', 'SOLUCIONADO', 'OK'].includes(io) || ['1', 'UP', 'OPERANDO', 'ATENDIDO'].includes(qp)) {
-      return 'Resuelto';}
-    if (['0', 'DOWN', 'FALLA', 'EN PROCESO', 'PROCESO', 'ATENCION', 'EN ATENCION', 'ASIGNADO'].includes(io) || ['0', 'DOWN', 'FALLA', 'EN PROCESO'].includes(qp)) {
-      return 'En Atención';}
-    if (['PENDIENTE', 'ESPERA', 'HOLD', 'VALIDAR'].includes(io) || ['PENDIENTE', 'ESPERA'].includes(qp)) {
-      return 'Pendiente';}
-    if (['CERRADO', 'CANCELADO'].includes(io) || ['CERRADO'].includes(qp)) {
-      return 'Cerrado';}
-    return 'Abierto';
-  };
-  const areasDisponibles = computed(() => {
-    if (!Array.isArray(incidentes.value)) return [];
-    const areas = incidentes.value.map(i => i.area_operativa || i.area).filter(Boolean);
-    return [...new Set(areas)];
-  });
-  // 1. CARGA DE CATÁLOGOS
-  const cargarCatalogos = async () => {
-    try {
-      const [resTec, resEval, resCen] = await Promise.all([
-        getTecnicos().catch(err => { console.warn('Error getTecnicos:', err); return null; }),
-        getEvaluadores().catch(err => { console.warn('Error getEvaluadores:', err); return null; }),
-        getCentrales().catch(err => { console.warn('Error getCentrales:', err); return null; })
-      ]);
-      if (resTec) {
-        const rawData = resTec.data?.results || resTec.data || resTec || [];
-        const lista = Array.isArray(rawData) ? rawData : [];
-        tecnicos.value = lista.map(u => ({
-          id: u.id || u.pk || u.user_id,
-          nombre: `${u.first_name || ''} ${u.last_name || ''}`.trim() || u.username || u.nombre || `Técnico ${u.id}`
-        })).filter(t => t.id !== undefined);
-      } else {
-        tecnicos.value = [];
-      }
-      if (resEval) {
-        const rawData = resEval.data?.results || resEval.data || resEval || [];
-        const lista = Array.isArray(rawData) ? rawData : [];
-        evaluadores.value = lista.map(u => ({
-          id: u.id || u.pk || u.user_id,
-          nombre: `${u.first_name || ''} ${u.last_name || ''}`.trim() || u.username || u.nombre || `Evaluador ${u.id}`
-        })).filter(e => e.id !== undefined);
-      } else {
-        evaluadores.value = [];
-      }
-      if (resCen) {
-        const rawData = resCen.data?.results || resCen.data || resCen || [];
-        centrales.value = Array.isArray(rawData) ? rawData : [];
-      } else {
-        centrales.value = [];
-      }
-    } catch (error) {
-      console.error("Error crítico en catálogos:", error);
+    estado_enlace: '',
+    dilacion_min: '',
+    ordering: '-fecha_apertura',
+  })
+
+  const paginacion = reactive({ pagina: 1, tamano: 50, total: 0 })
+
+  const totalPaginas = computed(() =>
+    Math.max(1, Math.ceil((paginacion.total || 0) / paginacion.tamano)),
+  )
+
+  const parametros = () => {
+    const params = { page: paginacion.pagina, page_size: paginacion.tamano }
+    for (const [clave, valor] of Object.entries(filtros)) {
+      if (valor !== '' && valor !== null && valor !== undefined) params[clave] = valor
     }
-  };
-  // 2. CARGA DE INCIDENTES CON ENRIQUECIMIENTO DE TÉCNICOS Y EVALUADORES
-  const cargarIncidentes = async () => {
-    cargando.value = true;
+    return params
+  }
+
+  const cargarCatalogos = async () => {
+    const [resTecnicos, resEvaluadores, resCentrales, resAreas] = await Promise.allSettled([
+      getTecnicos(),
+      getEvaluadores(),
+      getCentrales(),
+      getAreas(),
+    ])
+    tecnicos.value = resTecnicos.status === 'fulfilled' ? listaDe(resTecnicos.value) : []
+    evaluadores.value = resEvaluadores.status === 'fulfilled' ? listaDe(resEvaluadores.value) : []
+    centrales.value = resCentrales.status === 'fulfilled' ? listaDe(resCentrales.value) : []
+    areas.value = resAreas.status === 'fulfilled' ? listaDe(resAreas.value) : []
+  }
+
+  const cargarMetricas = async () => {
+    const params = { ...parametros() }
+    delete params.page
+    delete params.page_size
+    delete params.ordering
     try {
-      const params = {};
-      if (filtros.value.folio) params.search = filtros.value.folio;
-      if (filtros.value.area_operativa) params.area_operativa = filtros.value.area_operativa;
-      if (filtros.value.central) params.central = filtros.value.central;
-      if (filtros.value.tecnico) params.tecnico = filtros.value.tecnico; 
-      if (filtros.value.evaluador) params.evaluador = filtros.value.evaluador; 
-      if (filtros.value.estatus) params.estatus_io = filtros.value.estatus;
-      const res = await getIncidentes(params);
-      const rawData = res?.data?.results || res?.data || res || [];
-      const lista = Array.isArray(rawData) ? rawData : [];
-      incidentes.value = lista.map(inc => {
-        let nombreTecnico = inc.tecnico_nombre;
-        if (!nombreTecnico) {
-          if (typeof inc.tecnico === 'object' && inc.tecnico) {
-            nombreTecnico = inc.tecnico.first_name || inc.tecnico.nombre || inc.tecnico.username;
-          } else if (inc.tecnico) {
-            const match = tecnicos.value.find(t => Number(t.id) === Number(inc.tecnico));
-            if (match) nombreTecnico = match.nombre;
-          }}
-        let nombreEvaluador = inc.evaluador_nombre;
-        if (!nombreEvaluador) {
-          if (typeof inc.evaluador === 'object' && inc.evaluador) {
-            nombreEvaluador = inc.evaluador.first_name || inc.evaluador.nombre || inc.evaluador.username;
-          } else if (inc.evaluador) {
-            const match = evaluadores.value.find(e => Number(e.id) === Number(inc.evaluador));
-            if (match) nombreEvaluador = match.nombre;}}
-        return {
-          ...inc,
-          tecnico_nombre: nombreTecnico || 'Sin Asignar',
-          evaluador_nombre: nombreEvaluador || 'Sin Asignar'};});
-    } catch (error) {
-      console.error('Error al consultar incidentes:', error);
-      incidentes.value = [];
+      const { data } = await getMetricas(params)
+      metricas.value = data
+    } catch {
+      metricas.value = null
+    }
+  }
+
+  const cargarIncidentes = async ({ conMetricas = true } = {}) => {
+    cargando.value = true
+    error.value = null
+    try {
+      const { data } = await getIncidentes(parametros())
+      incidentes.value = Array.isArray(data) ? data : data.results || []
+      paginacion.total = Array.isArray(data) ? incidentes.value.length : data.count || 0
+      if (conMetricas) await cargarMetricas()
+    } catch (problema) {
+      incidentes.value = []
+      paginacion.total = 0
+      error.value = problema
+      throw problema
     } finally {
-      cargando.value = false;}};
-  //Columnas del panel kanban, con sus atributos definidos por colores
-  const columnasKanban = computed(() => {
-    const plantilla = [
-      { id: 'Abierto', key: 'Abierto', titulo: 'Abierto', label: 'Abierto', color: '#3b82f6' },
-      { id: 'En Atención', key: 'En Atención', titulo: 'En Atención', label: 'En Atención', color: '#eab308' },
-      { id: 'Pendiente', key: 'Pendiente', titulo: 'Pendiente', label: 'Pendiente', color: '#f97316' },
-      { id: 'Resuelto', key: 'Resuelto', titulo: 'Resuelto', label: 'Resuelto', color: '#10b981' },
-      { id: 'Cerrado', key: 'Cerrado', titulo: 'Cerrado', label: 'Cerrado', color: '#64748b' }];
-    const mapa = {};
-    plantilla.forEach(col => {
-      mapa[col.id] = { ...col, items: [], cards: [], incidentes: [] };});
-    const lista = Array.isArray(incidentes.value) ? incidentes.value : [];
-    lista.forEach(inc => {
-      const estatus = normalizarEstatus(inc);
-      const col = mapa[estatus] || mapa['Abierto'];
-      col.items.push(inc);
-      col.cards.push(inc);
-      col.incidentes.push(inc);});
-    return Object.values(mapa);});
+      cargando.value = false
+    }
+  }
+
+  const irAPagina = async (pagina) => {
+    const destino = Math.min(Math.max(1, pagina), totalPaginas.value)
+    if (destino === paginacion.pagina) return
+    paginacion.pagina = destino
+    await cargarIncidentes({ conMetricas: false })
+  }
+
+  const aplicarFiltros = async () => {
+    paginacion.pagina = 1
+    await cargarIncidentes()
+  }
+
+  let temporizador = null
+  const aplicarFiltrosConRetardo = (ms = 350) => {
+    clearTimeout(temporizador)
+    temporizador = setTimeout(() => {
+      aplicarFiltros()
+    }, ms)
+  }
+
+  const limpiarFiltros = async () => {
+    Object.assign(filtros, {
+      search: '',
+      estatus: '',
+      area_operativa: '',
+      central: '',
+      tecnico: '',
+      evaluador: '',
+      estado_enlace: '',
+      dilacion_min: '',
+      ordering: '-fecha_apertura',
+    })
+    await aplicarFiltros()
+  }
+
+  const reemplazarIncidente = (actualizado) => {
+    const indice = incidentes.value.findIndex((item) => item.id === actualizado.id)
+    if (indice === -1) return
+    incidentes.value.splice(indice, 1, { ...incidentes.value[indice], ...actualizado })
+  }
+
+  const columnasKanban = computed(() =>
+    COLUMNAS_KANBAN.map((columna) => ({
+      ...columna,
+      items: incidentes.value.filter((item) => item.estatus === columna.id),
+    })),
+  )
+
+  const kpis = computed(() => {
+    const fuente = metricas.value
+    if (fuente) return fuente
+    const lista = incidentes.value
+    return {
+      total: paginacion.total || lista.length,
+      pendientes: lista.filter((i) => i.estatus === ESTATUS.PENDIENTE).length,
+      asignados: lista.filter((i) => i.estatus === ESTATUS.ASIGNADO).length,
+      en_proceso: lista.filter((i) => i.estatus === ESTATUS.EN_PROCESO).length,
+      liquidados: lista.filter((i) => i.estatus === ESTATUS.LIQUIDADO).length,
+      en_dilacion: lista.filter((i) => i.semaforo === 'alerta' || i.semaforo === 'critico').length,
+      criticos: lista.filter((i) => i.semaforo === 'critico').length,
+      mttr_horas_promedio: null,
+      pendientes_exportar: null,
+    }
+  })
+
   return {
-    cargando, incidentes, tecnicos, evaluadores, centrales, filtros, areasDisponibles,
-    kpiTotal, kpiDilacion, columnasKanban,
-    cargarCatalogos, cargarIncidentes, normalizarEstatus};}
+    cargando,
+    error,
+    incidentes,
+    tecnicos,
+    evaluadores,
+    centrales,
+    areas,
+    metricas,
+    filtros,
+    paginacion,
+    totalPaginas,
+    columnasKanban,
+    kpis,
+    cargarCatalogos,
+    cargarIncidentes,
+    cargarMetricas,
+    aplicarFiltros,
+    aplicarFiltrosConRetardo,
+    limpiarFiltros,
+    irAPagina,
+    reemplazarIncidente,
+  }
+}

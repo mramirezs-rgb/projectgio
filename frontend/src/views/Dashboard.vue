@@ -1,291 +1,626 @@
 <script setup>
-import { ref, onMounted } from 'vue';
-import { createIncidente, updateIncidente } from '../services/api';
-import { useIncidentes } from '../composables/useIncidentes';
-import { useAuth } from '../composables/useAuth';
-import KanbanBoard from '../components/KanbanBoard.vue';
-import TablaIncidentes from '../components/TablaIncidentes.vue';
-import IncidenteModal from '../components/IncidenteModal.vue';
-import '../assets/dashboardstyle.css'
-import { mostrarExito, mostrarError } from '../utils/alerts.js';
-const { 
-  usuario, 
-  esTecnico, 
-  esGerencia, 
-  puedeCrearFolio 
-} = useAuth();
-const vista = ref('kanban');
-const mostrarFormulario = ref(false);
-const editando = ref(false);
-const formInicial = { 
-  id: null, 
-  folio: '', 
-  empresa: '', 
-  referencia: '', 
+import { computed, onMounted, ref } from 'vue'
+import IncidenteModal from '../components/IncidenteModal.vue'
+import KanbanBoard from '../components/KanbanBoard.vue'
+import TablaIncidentes from '../components/TablaIncidentes.vue'
+import { useAuth } from '../composables/useAuth.js'
+import { COLUMNAS_KANBAN, ESTATUS, etiquetaEstatus, useIncidentes } from '../composables/useIncidentes.js'
+import {
+  asignarMasivo,
+  createIncidente,
+  liquidarIncidente,
+  mensajeDeError,
+  updateIncidente,
+} from '../services/api.js'
+import {
+  confirmarAccion,
+  mostrarAdvertencia,
+  mostrarError,
+  mostrarExito,
+  notificar,
+} from '../utils/alerts.js'
+import { descargarCSV, formatearFecha, formatearHoras, marcaDeTiempo } from '../utils/formato.js'
+
+const { usuario, rol, permisos } = useAuth()
+const {
+  cargando,
+  incidentes,
+  tecnicos,
+  evaluadores,
+  centrales,
+  areas,
+  filtros,
+  paginacion,
+  totalPaginas,
+  columnasKanban,
+  kpis,
+  cargarCatalogos,
+  cargarIncidentes,
+  aplicarFiltros,
+  aplicarFiltrosConRetardo,
+  limpiarFiltros,
+  irAPagina,
+  reemplazarIncidente,
+} = useIncidentes()
+
+const FORM_VACIO = {
+  id: null,
+  folio: '',
+  empresa: '',
+  referencia: '',
   tipo_servicio: '',
-  area_operativa: '', 
-  central: '', 
-  tecnico: null, 
+  area_operativa: '',
+  central: '',
+  tecnico: null,
   evaluador: null,
-  estatus_io: 'ABIERTO',
-  estatus_qp: 'DESCONOCIDO',
-  dilacion_dias: 0, 
+  estatus: ESTATUS.PENDIENTE,
+  estado_enlace: 'DESCONOCIDO',
+  codigo_fallo: '',
+  descripcion: '',
+  diagnostico_final: '',
+  obs_usuario: '',
+  observaciones_sisa: '',
   dir_pta_a: '',
   ips: '',
-  dslam: '',              
-  red_secundaria: '',     
-  desc_f1: '',            
-  desc_cod4: '',          
-  desc_carls: '',         
-  desc_cod5: '',          
-  cve_liq: '',            
-  desc_liq: '',           
-  obs_usuario: ''
-};
-const formActual = ref({ ...formInicial });
-const { 
-  cargando, incidentes, tecnicos, evaluadores, centrales, filtros, areasDisponibles,
-  kpiTotal, kpiDilacion, columnasKanban, cargarCatalogos, cargarIncidentes 
-} = useIncidentes();
+  dslam: '',
+  red_secundaria: '',
+  telefono_tecnico: '',
+  desc_f1: '',
+  desc_cod4: '',
+  desc_carls: '',
+  desc_cod5: '',
+  cve_liq: '',
+  desc_liq: '',
+}
+
+const vista = ref('kanban')
+const modalAbierto = ref(false)
+const editando = ref(false)
+const guardando = ref(false)
+const formActual = ref({ ...FORM_VACIO })
+const seleccion = ref([])
+const tecnicoMasivo = ref('')
+
+const seleccionados = computed(() =>
+  incidentes.value.filter((item) => seleccion.value.includes(item.id)),
+)
+
+const rangoMostrado = computed(() => {
+  if (!paginacion.total) return '0'
+  const desde = (paginacion.pagina - 1) * paginacion.tamano + 1
+  const hasta = Math.min(paginacion.pagina * paginacion.tamano, paginacion.total)
+  return `${desde}–${hasta} de ${paginacion.total}`
+})
+
 onMounted(async () => {
-  if (esTecnico.value && usuario.value?.id) {
-    filtros.value.tecnico = usuario.value.id;
-  }
-  await cargarCatalogos();
-  await cargarIncidentes();
-});
-const abrirNuevo = () => {
-  formActual.value = { ...formInicial };
-  editando.value = false;
-  mostrarFormulario.value = true;
-};
-const abrirEditar = (inc) => {
-  let tecnicoId = null;
-  if (inc.tecnico && typeof inc.tecnico === 'object') {
-    tecnicoId = inc.tecnico.id;
-  } else if (inc.tecnico) {
-    tecnicoId = inc.tecnico;
-  }
-  let evaluadorId = null;
-  if (inc.evaluador && typeof inc.evaluador === 'object') {
-    evaluadorId = inc.evaluador.id;
-  } else if (inc.evaluador) {
-    evaluadorId = inc.evaluador;
-  }
-  formActual.value = { 
-    ...formInicial, 
-    ...inc,
-    area_operativa: String(inc.area_operativa || inc.area || '').toUpperCase().trim(),
-    dilacion_dias: inc.dilacion_dias || inc.dilacion || 0,
-    tecnico: tecnicoId,
-    evaluador: evaluadorId,
-    dir_pta_a: inc.dir_pta_a || inc.direccion || '',
-    ips: inc.ips || inc.ip_servicio || '',
-    estatus_io: inc.estatus_io || 'ABIERTO',
-    estatus_qp: inc.estatus_qp || inc.estado_enlace || 'DESCONOCIDO'
-  };
-  editando.value = true;
-  mostrarFormulario.value = true;
-};
-const procesarGuardado = async (payload) => {
+  await cargarCatalogos()
   try {
-    let tecnicoAsignado = null;
-    if (payload.tecnico && typeof payload.tecnico === 'object') {
-      tecnicoAsignado = payload.tecnico.id;
-    } else if (payload.tecnico) {
-      tecnicoAsignado = parseInt(payload.tecnico, 10);
-    }
-    let evaluadorAsignado = null;
-    if (payload.evaluador && typeof payload.evaluador === 'object') {
-      evaluadorAsignado = payload.evaluador.id;
-    } else if (payload.evaluador) {
-      evaluadorAsignado = parseInt(payload.evaluador, 10);
-    }
-    const datosEnvio = {
-      folio: payload.folio,
-      empresa: payload.empresa || '',
-      referencia: payload.referencia || '',
-      tipo_servicio: payload.tipo_servicio || '',
-      area_operativa: String(payload.area_operativa || '').toUpperCase().trim(),
-      central: payload.central || 'SIN CENTRAL',
-      dilacion_dias: parseInt(payload.dilacion_dias, 10) || 0,
-      dir_pta_a: payload.dir_pta_a || '',
-      ips: payload.ips || '',
-      red_secundaria: payload.red_secundaria || '',           
-      dslam: payload.dslam || '',                             
-      desc_f1: payload.desc_f1 || '',                         
-      desc_cod4: payload.desc_cod4 || '',                     
-      desc_carls: payload.desc_carls || '',                   
-      desc_cod5: payload.desc_cod5 || '',                     
-      cve_liq: payload.cve_liq || '',                         
-      desc_liq: payload.desc_liq || '',                       
-      estatus_io: payload.estatus_io || 'ABIERTO',
-      estatus_qp: payload.estatus_qp || '',
-      obs_usuario: payload.obs_usuario || '',
-      tecnico: Number.isInteger(tecnicoAsignado) && tecnicoAsignado > 0 ? tecnicoAsignado : null,
-      evaluador: Number.isInteger(evaluadorAsignado) && evaluadorAsignado > 0 ? evaluadorAsignado : null
-    };
-    if (editando.value) {
-      await updateIncidente(payload.id, datosEnvio);
-    } else {
-      await createIncidente(datosEnvio);
-    }
-    mostrarFormulario.value = false;
-    await cargarIncidentes();
-    mostrarExito('¡Folio Actualizado!', 'Los cambios del incidente se guardaron correctamente.');
+    await cargarIncidentes()
   } catch (error) {
-    mostrarError('Error de guardado', 'No se pudo conectar con el servidor para guardar los datos.');
-    const detalleError = error.response?.data ? JSON.stringify(error.response.data, null, 2) : error.message;
-    alert(`No se pudo guardar. Verifica los datos.\nDetalle: ${detalleError}`);
+    mostrarError('No se pudieron cargar los folios', mensajeDeError(error))
   }
-};
-const exportarCSV = () => {
+})
+
+const abrirNuevo = () => {
+  formActual.value = { ...FORM_VACIO }
+  editando.value = false
+  modalAbierto.value = true
+}
+
+const abrirEditar = (incidente) => {
+  formActual.value = { ...FORM_VACIO, ...incidente }
+  editando.value = true
+  modalAbierto.value = true
+}
+
+const guardar = async (datos) => {
+  guardando.value = true
+  try {
+    if (editando.value) {
+      const { data } = await updateIncidente(datos.id, datos)
+      reemplazarIncidente(data)
+      notificar('Folio actualizado')
+    } else {
+      await createIncidente(datos)
+      mostrarExito('Folio creado', `El folio ${datos.folio} quedó registrado como pendiente.`)
+      await cargarIncidentes()
+    }
+    modalAbierto.value = false
+  } catch (error) {
+    mostrarError('No se pudo guardar el folio', mensajeDeError(error))
+  } finally {
+    guardando.value = false
+  }
+}
+
+const liquidar = async (datos) => {
+  guardando.value = true
+  try {
+    const { data } = await liquidarIncidente(datos.id, datos)
+    reemplazarIncidente(data)
+    modalAbierto.value = false
+    mostrarExito('Folio liquidado', `MTTR registrado: ${formatearHoras(data.mttr_horas)}.`)
+  } catch (error) {
+    mostrarError('No se pudo liquidar el folio', mensajeDeError(error))
+  } finally {
+    guardando.value = false
+  }
+}
+
+const moverEnTablero = async ({ incidente, estatus }) => {
+  if (estatus === ESTATUS.LIQUIDADO) {
+    abrirEditar(incidente)
+    mostrarAdvertencia(
+      'Liquidación con evidencia',
+      'Para liquidar un folio se requiere diagnóstico final y al menos una evidencia fotográfica.',
+    )
+    return
+  }
+  const anterior = incidente.estatus
+  reemplazarIncidente({ ...incidente, estatus })
+  try {
+    const { data } = await updateIncidente(incidente.id, { estatus })
+    reemplazarIncidente(data)
+    notificar(`${incidente.folio} → ${etiquetaEstatus(estatus)}`)
+  } catch (error) {
+    reemplazarIncidente({ ...incidente, estatus: anterior })
+    mostrarError('No se pudo mover el folio', mensajeDeError(error))
+  }
+}
+
+const asignarSeleccion = async () => {
+  if (!tecnicoMasivo.value || seleccionados.value.length === 0) return
+  const tecnico = tecnicos.value.find((t) => String(t.id) === String(tecnicoMasivo.value))
+  const confirmado = await confirmarAccion(
+    'Reasignación masiva',
+    `Se asignarán ${seleccionados.value.length} folio(s) a ${tecnico?.nombre || 'el técnico elegido'}.`,
+    'Asignar',
+  )
+  if (!confirmado) return
+  try {
+    const { data } = await asignarMasivo({
+      folios: seleccionados.value.map((item) => item.folio),
+      tecnico: Number(tecnicoMasivo.value),
+    })
+    seleccion.value = []
+    tecnicoMasivo.value = ''
+    await cargarIncidentes()
+    mostrarExito('Folios reasignados', `${data.actualizados} folio(s) actualizados.`)
+  } catch (error) {
+    mostrarError('No se pudo reasignar', mensajeDeError(error))
+  }
+}
+
+const exportar = () => {
   if (incidentes.value.length === 0) {
-    alert('No hay datos disponibles para exportar.');
-    return;}
-  const cabeceras = ['Folio', 'Empresa', 'Referencia', 'Tipo Servicio', 'Area Operativa', 'Central', 'Técnico', 'Evaluador', 'Estatus IO', 'Estado Enlace', 'Dilación Días', 'Dirección', 'IP'];
-  const filas = incidentes.value.map(inc => [
-    `"${inc.folio || ''}"`,
-    `"${inc.empresa || ''}"`,
-    `"${inc.referencia || ''}"`,
-    `"${inc.tipo_servicio || ''}"`,
-    `"${inc.area_operativa || ''}"`,
-    `"${inc.central || ''}"`,
-    `"${inc.tecnico_nombre || inc.tecnico?.username || inc.tecnico || ''}"`,
-    `"${inc.evaluador_nombre || inc.evaluador?.username || inc.evaluador || ''}"`,
-    `"${inc.estatus_io || ''}"`,
-    `"${inc.estatus_qp || ''}"`,
-    inc.dilacion_dias || 0,
-    `"${inc.dir_pta_a || ''}"`,
-    `"${inc.ips || ''}"`
-  ]);
-  const contenidoCSV = 'data:text/csv;charset=utf-8,' + [cabeceras.join(','), ...filas.map(e => e.join(','))].join('\n');
-  const encodedUri = encodeURI(contenidoCSV);
-  const link = document.createElement('a');
-  link.setAttribute('href', encodedUri);
-  link.setAttribute('download', `Reporte_Incidencias_GIO_${new Date().toISOString().slice(0,10)}.csv`);
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-};
-let timerBusqueda = null;
-const onFolioInput = () => {
-  clearTimeout(timerBusqueda);
-  timerBusqueda = setTimeout(() => {
-    cargarIncidentes();
-  }, 350);
-};
-const limpiarFolio = () => {
-  filtros.value.folio = '';
-  cargarIncidentes();
-};
+    mostrarAdvertencia('Sin datos', 'No hay folios en la vista actual para exportar.')
+    return
+  }
+  descargarCSV(
+    `GIO_Incidencias_${marcaDeTiempo()}.csv`,
+    [
+      'Folio',
+      'Empresa',
+      'Referencia',
+      'Tipo de servicio',
+      'Area operativa',
+      'Central',
+      'Tecnico',
+      'Evaluador',
+      'Estatus',
+      'Estado del enlace',
+      'Dilacion (dias)',
+      'Apertura',
+      'Cierre',
+      'MTTR (horas)',
+      'Evidencias',
+      'Direccion',
+      'IP',
+    ],
+    incidentes.value.map((inc) => [
+      inc.folio,
+      inc.empresa,
+      inc.referencia,
+      inc.tipo_servicio,
+      inc.area_operativa,
+      inc.central,
+      inc.tecnico_nombre,
+      inc.evaluador_nombre,
+      etiquetaEstatus(inc.estatus),
+      inc.estado_enlace,
+      inc.dilacion_dias ?? 0,
+      formatearFecha(inc.fecha_apertura),
+      formatearFecha(inc.fecha_cierre),
+      inc.mttr_horas ?? '',
+      inc.total_evidencias ?? 0,
+      inc.dir_pta_a,
+      inc.ips,
+    ]),
+  )
+  notificar('Reporte CSV descargado')
+}
+
+const ordenar = async (campo) => {
+  filtros.ordering = campo
+  await aplicarFiltros()
+}
 </script>
+
 <template>
-  <div class="gio-app">
-    <header class="top-bar">
-      <div class="brand-group">
-        <div class="logo-badge">GIO</div>
-        <h1 class="system-title">SISTEMA DE GESTIÓN DE INCIDENCIAS</h1>
-        <div class="user-chip" v-if="usuario">
-          <span>USUARIO: {{ usuario.nombre || usuario.username }}</span>
-          <span class="role-tag">{{ usuario.rol || 'Sin indentificar' }}</span>
+  <div class="panel">
+    <section class="indicadores">
+      <article class="indicador gio-panel">
+        <span class="indicador__titulo">Folios visibles</span>
+        <strong class="indicador__valor">{{ kpis.total ?? 0 }}</strong>
+        <small>{{ rangoMostrado }} en pantalla</small>
+      </article>
+      <article
+        v-for="columna in COLUMNAS_KANBAN"
+        :key="columna.id"
+        class="indicador gio-panel"
+        :style="{ borderTopColor: columna.color }"
+      >
+        <span class="indicador__titulo">{{ columna.titulo }}</span>
+        <strong class="indicador__valor">
+          {{
+            columna.id === 'PENDIENTE'
+              ? kpis.pendientes
+              : columna.id === 'ASIGNADO'
+                ? kpis.asignados
+                : columna.id === 'EN_PROCESO'
+                  ? kpis.en_proceso
+                  : kpis.liquidados
+          }}
+        </strong>
+      </article>
+      <article class="indicador indicador--alerta gio-panel">
+        <span class="indicador__titulo">
+          Dilación ≥ {{ kpis.umbral_dilacion_dias ?? 5 }} días
+        </span>
+        <strong class="indicador__valor indicador__valor--rojo">{{ kpis.en_dilacion ?? 0 }}</strong>
+        <small>{{ kpis.criticos ?? 0 }} en nivel crítico</small>
+      </article>
+      <article class="indicador gio-panel">
+        <span class="indicador__titulo">MTTR promedio</span>
+        <strong class="indicador__valor">{{ formatearHoras(kpis.mttr_horas_promedio) }}</strong>
+        <small v-if="kpis.pendientes_exportar">
+          {{ kpis.pendientes_exportar }} por exportar a SISA
+        </small>
+      </article>
+    </section>
+
+    <section class="filtros gio-panel">
+      <div class="filtros__grupo">
+        <div class="filtros__campo filtros__campo--busqueda">
+          <label class="gio-etiqueta" for="buscar">Buscar</label>
+          <input
+            id="buscar"
+            v-model.trim="filtros.search"
+            type="search"
+            placeholder="Folio, empresa, referencia, IP…"
+            @input="aplicarFiltrosConRetardo()"
+            @keyup.enter="aplicarFiltros"
+          />
         </div>
-      </div>
-      <div class="header-right">
-        <button v-if="puedeCrearFolio" @click="abrirNuevo" class="btn btn-primary-gio">
-          + Nuevo Folio
-        </button>        
-        <button v-if="esGerencia" @click="exportarCSV" class="btn btn-primary-gio">
-          - Exportar Reporte
-        </button>
-      </div>
-    </header>
-    <main class="dashboard-body">
-      <section class="kpi-grid">
-        <div class="kpi-card">
-          <div class="kpi-header"><span class="kpi-title">TOTAL FOLIOS</span></div>
-          <div class="kpi-value">{{ kpiTotal }}</div>
-        </div>
-        <div class="kpi-card">
-          <div class="kpi-header">
-            <span class="kpi-title">DILACIÓN > 5 DÍAS</span>
-            <span class="kpi-badge badge-red-text">ALERTA</span>
-          </div>
-          <div class="kpi-value red-text">{{ kpiDilacion }}</div>
-        </div>
-      </section>
-      <section class="filter-bar">
-        <div class="filters-left">
-          <span class="filter-label">Buscar:</span>          
-          <div class="search-box">
-            <span class="search-icon"></span>
-            <input 
-              v-model="filtros.folio" 
-              @input="onFolioInput"
-              @keyup.enter="cargarIncidentes"
-              type="text" 
-              placeholder="Folio (ej. 12578004)..." 
-              class="filter-input"
-            />
-            <button 
-              v-if="filtros.folio" 
-              @click="limpiarFolio" 
-              class="btn-clear-folio" 
-              type="button"
-            >
-              ✕ Cerrar
-            </button>
-          </div>
-          <span class="filter-label ms-2">Filtrar:</span>
-          <select v-model="filtros.area_operativa" @change="cargarIncidentes" class="filter-select">
-            <option value="">Área: Todas</option>
-            <option v-for="area in areasDisponibles" :key="area" :value="area">{{ area }}</option>
+        <div class="filtros__campo">
+          <label class="gio-etiqueta" for="f-estatus">Estatus</label>
+          <select id="f-estatus" v-model="filtros.estatus" @change="aplicarFiltros">
+            <option value="">Todos</option>
+            <option v-for="columna in COLUMNAS_KANBAN" :key="columna.id" :value="columna.id">
+              {{ columna.titulo }}
+            </option>
           </select>
-          <select v-model="filtros.central" @change="cargarIncidentes" class="filter-select">
-            <option value="">COPE: Todos</option>
-            <option v-for="c in centrales" :key="c.id" :value="c.nombre">{{ c.nombre }}</option>
+        </div>
+        <div class="filtros__campo">
+          <label class="gio-etiqueta" for="f-area">Área</label>
+          <select id="f-area" v-model="filtros.area_operativa" @change="aplicarFiltros">
+            <option value="">Todas</option>
+            <option v-for="area in areas" :key="area.id" :value="area.nombre">
+              {{ area.nombre }}
+            </option>
           </select>
-          <select v-if="!esTecnico" v-model="filtros.tecnico" @change="cargarIncidentes" class="filter-select">
-            <option value="">Técnico: Todos</option>
+        </div>
+        <div class="filtros__campo">
+          <label class="gio-etiqueta" for="f-central">COPE / Central</label>
+          <select id="f-central" v-model="filtros.central" @change="aplicarFiltros">
+            <option value="">Todas</option>
+            <option v-for="central in centrales" :key="central.id" :value="central.nombre">
+              {{ central.nombre }}
+            </option>
+          </select>
+        </div>
+        <div class="filtros__campo">
+          <label class="gio-etiqueta" for="f-tecnico">Técnico</label>
+          <select id="f-tecnico" v-model="filtros.tecnico" @change="aplicarFiltros">
+            <option value="">Todos</option>
             <option v-for="t in tecnicos" :key="t.id" :value="t.id">{{ t.nombre }}</option>
           </select>
-          <select v-model="filtros.estatus" @change="cargarIncidentes" class="filter-select">
-            <option value="">Estado: Todos</option>
-            <option value="ABIERTO">Abierto</option>
-            <option value="EN PROCESO">En Atención</option>
-            <option value="PENDIENTE">Pendiente</option>
-            <option value="RESUELTO">Resuelto</option>
-            <option value="CERRADO">Cerrado</option>
-          </select>
-        </div>        
-        <div class="view-toggle">
-          <button @click="vista = 'tabla'" :class="['toggle-btn', { active: vista === 'tabla' }]">Tabla</button>
-          <button @click="vista = 'kanban'" :class="['toggle-btn', { active: vista === 'kanban' }]">Kanban</button>
         </div>
-      </section>
-      <section v-if="cargando" class="loading-state">
-      </section>
-      <KanbanBoard 
-        v-else-if="vista === 'kanban'" 
-        :columnas="columnasKanban" 
-        @editar="abrirEditar"
-      />
-      <TablaIncidentes 
-        v-else 
-        :incidentes="incidentes" 
-        @editar="abrirEditar"
-      />
-    </main>
-    <IncidenteModal 
-      v-if="mostrarFormulario"
-      :centrales="centrales" 
+        <div v-if="permisos.vision_global" class="filtros__campo">
+          <label class="gio-etiqueta" for="f-evaluador">Evaluador</label>
+          <select id="f-evaluador" v-model="filtros.evaluador" @change="aplicarFiltros">
+            <option value="">Todos</option>
+            <option v-for="e in evaluadores" :key="e.id" :value="e.id">{{ e.nombre }}</option>
+          </select>
+        </div>
+        <div class="filtros__campo">
+          <label class="gio-etiqueta" for="f-enlace">Enlace</label>
+          <select id="f-enlace" v-model="filtros.estado_enlace" @change="aplicarFiltros">
+            <option value="">Todos</option>
+            <option value="UP">UP</option>
+            <option value="DOWN">DOWN</option>
+            <option value="DESCONOCIDO">Desconocido</option>
+          </select>
+        </div>
+        <div class="filtros__campo">
+          <label class="gio-etiqueta" for="f-dilacion">Dilación mínima</label>
+          <input
+            id="f-dilacion"
+            v-model="filtros.dilacion_min"
+            type="number"
+            min="0"
+            placeholder="0"
+            @change="aplicarFiltros"
+          />
+        </div>
+      </div>
+
+      <div class="filtros__acciones">
+        <button type="button" class="gio-boton gio-boton--secundario" @click="limpiarFiltros">
+          Limpiar filtros
+        </button>
+        <button
+          v-if="permisos.crear_folio"
+          type="button"
+          class="gio-boton gio-boton--primario"
+          @click="abrirNuevo"
+        >
+          Nuevo folio
+        </button>
+        <button
+          v-if="permisos.exportar"
+          type="button"
+          class="gio-boton gio-boton--secundario"
+          @click="exportar"
+        >
+          Exportar CSV
+        </button>
+        <div class="conmutador" role="group" aria-label="Tipo de vista">
+          <button
+            type="button"
+            :class="['conmutador__btn', { 'conmutador__btn--activo': vista === 'kanban' }]"
+            @click="vista = 'kanban'"
+          >
+            Kanban
+          </button>
+          <button
+            type="button"
+            :class="['conmutador__btn', { 'conmutador__btn--activo': vista === 'tabla' }]"
+            @click="vista = 'tabla'"
+          >
+            Tabla
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <section
+      v-if="vista === 'tabla' && permisos.asignar && seleccion.length"
+      class="masiva gio-panel"
+    >
+      <span>{{ seleccion.length }} folio(s) seleccionados</span>
+      <select v-model="tecnicoMasivo" aria-label="Técnico destino">
+        <option value="">Elegir técnico…</option>
+        <option v-for="t in tecnicos" :key="t.id" :value="t.id">
+          {{ t.nombre }} · {{ t.expediente }}
+        </option>
+      </select>
+      <button
+        type="button"
+        class="gio-boton gio-boton--primario"
+        :disabled="!tecnicoMasivo"
+        @click="asignarSeleccion"
+      >
+        Reasignar
+      </button>
+      <button type="button" class="gio-boton gio-boton--secundario" @click="seleccion = []">
+        Cancelar
+      </button>
+    </section>
+
+    <p v-if="cargando" class="gio-cargando">Consultando folios…</p>
+
+    <KanbanBoard
+      v-else-if="vista === 'kanban'"
+      :columnas="columnasKanban"
+      :puede-mover="permisos.asignar || permisos.liquidar"
+      @editar="abrirEditar"
+      @mover="moverEnTablero"
+    />
+
+    <TablaIncidentes
+      v-else
+      :incidentes="incidentes"
+      :orden-actual="filtros.ordering"
+      :seleccion="seleccion"
+      :seleccionable="permisos.asignar"
+      @editar="abrirEditar"
+      @ordenar="ordenar"
+      @actualizar:seleccion="seleccion = $event"
+    />
+
+    <nav v-if="!cargando && totalPaginas > 1" class="paginas" aria-label="Paginación">
+      <button
+        type="button"
+        class="gio-boton gio-boton--secundario"
+        :disabled="paginacion.pagina <= 1"
+        @click="irAPagina(paginacion.pagina - 1)"
+      >
+        Anterior
+      </button>
+      <span class="paginas__texto">
+        Página {{ paginacion.pagina }} de {{ totalPaginas }} · {{ rangoMostrado }}
+      </span>
+      <button
+        type="button"
+        class="gio-boton gio-boton--secundario"
+        :disabled="paginacion.pagina >= totalPaginas"
+        @click="irAPagina(paginacion.pagina + 1)"
+      >
+        Siguiente
+      </button>
+    </nav>
+
+    <IncidenteModal
+      v-if="modalAbierto"
+      :modelo="formActual"
+      :editando="editando"
+      :centrales="centrales"
       :tecnicos="tecnicos"
       :evaluadores="evaluadores"
-      :areas="areasDisponibles"
-      :editando="editando" 
-      :modelo="formActual" 
-      @close="mostrarFormulario = false" 
-      @save="procesarGuardado" 
+      :areas="areas"
+      :permisos="permisos"
+      :rol="rol || usuario?.rol || ''"
+      :guardando="guardando"
+      @close="modalAbierto = false"
+      @save="guardar"
+      @liquidar="liquidar"
     />
   </div>
 </template>
+
+<style scoped>
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.indicadores {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 0.75rem;
+}
+
+.indicador {
+  padding: 0.75rem 0.9rem;
+  border-top: 3px solid var(--borde);
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.indicador--alerta {
+  border-top-color: var(--peligro);
+}
+
+.indicador__titulo {
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--apagado);
+}
+
+.indicador__valor {
+  font-size: 1.65rem;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+
+.indicador__valor--rojo {
+  color: #f87171;
+}
+
+.indicador small {
+  font-size: 0.68rem;
+  color: #64748b;
+}
+
+.filtros {
+  padding: 0.9rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.filtros__grupo {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 0.7rem;
+}
+
+.filtros__campo--busqueda {
+  grid-column: span 2;
+  min-width: 220px;
+}
+
+.filtros__acciones {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.conmutador {
+  display: flex;
+  margin-left: auto;
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.conmutador__btn {
+  background: transparent;
+  border: none;
+  color: var(--apagado);
+  padding: 0.5rem 0.9rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.conmutador__btn--activo {
+  background-color: var(--acento);
+  color: #fff;
+}
+
+.masiva {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  flex-wrap: wrap;
+  padding: 0.7rem 0.9rem;
+  border-color: rgb(37 99 235 / 0.5);
+  font-size: 0.8125rem;
+}
+
+.masiva select {
+  max-width: 280px;
+}
+
+.paginas {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.paginas__texto {
+  font-size: 0.8125rem;
+  color: var(--apagado);
+}
+
+@media (max-width: 700px) {
+  .filtros__campo--busqueda {
+    grid-column: auto;
+  }
+  .conmutador {
+    margin-left: 0;
+    width: 100%;
+  }
+  .conmutador__btn {
+    flex: 1;
+  }
+}
+</style>

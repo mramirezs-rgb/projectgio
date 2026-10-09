@@ -1,73 +1,105 @@
-import { ref, computed } from 'vue';
-import { loginApi } from '../services/api.js';
+import { computed, ref } from 'vue'
+import {
+  getPerfil,
+  guardarSesion,
+  limpiarSesion,
+  loginApi,
+  mensajeDeError,
+  tokenActual,
+  usuarioGuardado,
+} from '../services/api.js'
 
-// ESTADO GLOBAL COMPARTIDO
-const token = ref(localStorage.getItem('gio_token') || null);
-const usuario = ref(JSON.parse(localStorage.getItem('gio_user') || 'null'));
-const cargando = ref(false);
-const errorLogin = ref(null);
+const token = ref(tokenActual())
+const usuario = ref(usuarioGuardado())
+const cargando = ref(false)
+const errorLogin = ref(null)
+
+const PERMISOS_VACIOS = {
+  vision_global: false,
+  asignar: false,
+  crear_folio: false,
+  gestionar_usuarios: false,
+  liquidar: false,
+  cargar_evidencia: false,
+  exportar: false,
+}
+
+export const ROLES = {
+  TECNICO: 'TECNICO',
+  PI_EVALUADOR: 'PI_EVALUADOR',
+  PI_SUB: 'PI_SUB',
+  ADMIN: 'ADMIN',
+}
+
+export const rutaInicialPara = (rol) => (rol === ROLES.TECNICO ? '/campo' : '/tablero')
+
 export function useAuth() {
-  const estaAutenticado = computed(() => !!token.value);
-  const esTecnico = computed(() => usuario.value?.rol === 'TECNICO');
-  const esEvaluador = computed(() => usuario.value?.rol === 'PI_EVALUADOR');
-  const esSubgerencia = computed(() => usuario.value?.rol === 'PI_SUB');
-  const esGerencia = computed(() => usuario.value?.rol === 'ADMIN' || usuario.value?.is_superuser);
-  const puedeCrearFolio = computed(() => esSubgerencia.value || esGerencia.value);
-  const puedeAsignar = computed(() => esSubgerencia.value || esGerencia.value);
-  const puedeGestionarUsuarios = computed(() => esGerencia.value);
+  const estaAutenticado = computed(() => !!token.value)
+  const rol = computed(() => usuario.value?.rol || null)
+  const permisos = computed(() => ({ ...PERMISOS_VACIOS, ...(usuario.value?.permisos || {}) }))
+
+  const esTecnico = computed(() => rol.value === ROLES.TECNICO)
+  const esEvaluador = computed(() => rol.value === ROLES.PI_EVALUADOR)
+  const esSubgerencia = computed(() => rol.value === ROLES.PI_SUB)
+  const esGerencia = computed(() => rol.value === ROLES.ADMIN || !!usuario.value?.is_superuser)
+
   const iniciarSesion = async (expediente, password) => {
-    cargando.value = true;
-    errorLogin.value = null;
+    cargando.value = true
+    errorLogin.value = null
     try {
-      const response = await loginApi({
-        username: expediente,
-        expediente: expediente,
-        password: password
-      });
-      const tokenRecibido = response.data.access || response.data.token || response.data.key;
-      const datosUsuario = response.data.user || response.data.usuario || { 
-        id: null,
-        expediente, 
-        nombre: expediente, 
-        rol: 'PI_EVALUADOR' 
-      };
-      if (!tokenRecibido) {
-        throw new Error('El servidor no devolvió un token de sesión.');
-      }
-      localStorage.setItem('gio_token', tokenRecibido);
-      localStorage.setItem('gio_user', JSON.stringify(datosUsuario));
-      token.value = tokenRecibido;
-      usuario.value = datosUsuario;
-    } catch (err) {
-      console.error('Error en iniciarSesion:', err);
-      if (err.response?.data) {
-        errorLogin.value = err.response.data.detail || err.response.data.error || 'Credenciales inválidas.';
-      } else {
-        errorLogin.value = 'No se pudo conectar con el servidor.';
-      }
+      const { data } = await loginApi({
+        expediente: String(expediente || '').trim(),
+        password,
+      })
+      if (!data.access) throw new Error('El servidor no devolvió un token de sesión.')
+      guardarSesion({ access: data.access, refresh: data.refresh, usuario: data.user })
+      token.value = data.access
+      usuario.value = data.user
+      return data.user
+    } catch (error) {
+      errorLogin.value =
+        error?.response?.status === 401
+          ? 'Expediente o contraseña incorrectos.'
+          : mensajeDeError(error, 'No se pudo iniciar sesión.')
+      throw error
     } finally {
-      cargando.value = false;
+      cargando.value = false
     }
-  };
+  }
+
+  const refrescarPerfil = async () => {
+    if (!token.value) return null
+    try {
+      const { data } = await getPerfil()
+      usuario.value = data
+      guardarSesion({ usuario: data })
+      return data
+    } catch {
+      return null
+    }
+  }
+
   const cerrarSesion = () => {
-    localStorage.removeItem('gio_token');
-    localStorage.removeItem('gio_user');
-    token.value = null;
-    usuario.value = null;
-  };
+    limpiarSesion()
+    token.value = null
+    usuario.value = null
+    errorLogin.value = null
+  }
+
   return {
     token,
     usuario,
-    estaAutenticado,
+    rol,
+    permisos,
     cargando,
-    errorLogin,esTecnico,
+    errorLogin,
+    estaAutenticado,
+    esTecnico,
     esEvaluador,
     esSubgerencia,
     esGerencia,
-    puedeCrearFolio,
-    puedeAsignar,
-    puedeGestionarUsuarios,
     iniciarSesion,
-    cerrarSesion
-  };
+    refrescarPerfil,
+    cerrarSesion,
+  }
 }

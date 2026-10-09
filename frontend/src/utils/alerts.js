@@ -1,51 +1,86 @@
-import Swal from 'sweetalert2';
+import Swal from 'sweetalert2'
 
 const GioSwal = Swal.mixin({
+  background: '#101a2e',
+  color: '#e8eefc',
   customClass: {
-    confirmButton: 'px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium mx-1',
-    cancelButton: 'px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 font-medium mx-1',
-    popup: 'rounded-2xl shadow-2xl border border-gray-100',
+    popup: 'gio-swal',
+    title: 'gio-swal__title',
+    htmlContainer: 'gio-swal__texto',
+    confirmButton: 'gio-swal__btn gio-swal__btn--primario',
+    cancelButton: 'gio-swal__btn gio-swal__btn--secundario',
+    denyButton: 'gio-swal__btn gio-swal__btn--peligro',
   },
   buttonsStyling: false,
-});
+  reverseButtons: true,
+})
 
-export const mostrarExito = (titulo, mensaje = '') => {
-  return GioSwal.fire({
+export const mostrarExito = (titulo, mensaje = '') =>
+  GioSwal.fire({
     icon: 'success',
     title: titulo,
     text: mensaje,
-    timer: 2500,
-    showConfirmButton: false,
+    timer: 2200,
     timerProgressBar: true,
-  });
-};
+    showConfirmButton: false,
+  })
 
-export const mostrarError = (titulo, mensaje = '') => {
-  return GioSwal.fire({
+export const mostrarError = (titulo, mensaje = '') =>
+  GioSwal.fire({
     icon: 'error',
     title: titulo,
-    text: mensaje,
+    html: mensaje ? `<pre class="gio-swal__detalle">${escapar(mensaje)}</pre>` : '',
     confirmButtonText: 'Aceptar',
-  });
-};
+  })
 
-export const mostrarAdvertencia = (titulo, mensaje = '') => {
-  return GioSwal.fire({
-    icon: 'warning',
-    title: titulo,
-    text: mensaje,
-    confirmButtonText: 'Entendido',
-  });
-};
+export const mostrarAdvertencia = (titulo, mensaje = '') =>
+  GioSwal.fire({ icon: 'warning', title: titulo, text: mensaje, confirmButtonText: 'Entendido' })
 
-export const confirmarAccion = async (titulo, mensaje) => {
-  const result = await GioSwal.fire({
+export const mostrarInfo = (titulo, mensaje = '') =>
+  GioSwal.fire({ icon: 'info', title: titulo, text: mensaje, confirmButtonText: 'Cerrar' })
+
+export const confirmarAccion = async (titulo, mensaje, textoConfirmar = 'Sí, continuar') => {
+  const { isConfirmed } = await GioSwal.fire({
     icon: 'question',
     title: titulo,
     text: mensaje,
     showCancelButton: true,
-    confirmButtonText: 'Sí, continuar',
+    confirmButtonText: textoConfirmar,
     cancelButtonText: 'Cancelar',
-  });
-  return result.isConfirmed;
-};
+    focusCancel: true,
+  })
+  return isConfirmed
+}
+
+export const pedirTexto = async (titulo, etiqueta, valorInicial = '') => {
+  const { isConfirmed, value } = await GioSwal.fire({
+    title: titulo,
+    input: 'textarea',
+    inputLabel: etiqueta,
+    inputValue: valorInicial,
+    inputAttributes: { 'aria-label': etiqueta, rows: '4' },
+    showCancelButton: true,
+    confirmButtonText: 'Guardar',
+    cancelButtonText: 'Cancelar',
+    inputValidator: (texto) => (texto && texto.trim() ? null : 'Este campo es obligatorio.'),
+  })
+  return isConfirmed ? String(value).trim() : null
+}
+
+export const notificar = (titulo, icono = 'success') =>
+  GioSwal.fire({
+    toast: true,
+    position: 'top-end',
+    icon: icono,
+    title: titulo,
+    showConfirmButton: false,
+    timer: 2600,
+    timerProgressBar: true,
+  })
+
+function escapar(texto) {
+  return String(texto)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+}

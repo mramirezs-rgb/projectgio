@@ -1,600 +1,382 @@
+@import 'tailwindcss';
 
-html, body, #app {
-  width: 100%;
-  max-width: 100vw;
-  overflow-x: hidden;
-  margin: 0;
-  padding: 0;
-  box-sizing: border-border-box;
+@theme {
+  --color-gio-fondo: #0b1120;
+  --color-gio-panel: #101a2e;
+  --color-gio-panel-alto: #16233d;
+  --color-gio-borde: #243352;
+  --color-gio-texto: #e8eefc;
+  --color-gio-apagado: #93a4c4;
+  --color-gio-acento: #2563eb;
+  --color-gio-acento-claro: #38bdf8;
+  --color-gio-ok: #10b981;
+  --color-gio-alerta: #f59e0b;
+  --color-gio-peligro: #ef4444;
 }
 
-*, *:before, *:after {
-  box-sizing: inherit;
+:root {
+  --fondo: #0b1120;
+  --panel: #101a2e;
+  --panel-alto: #16233d;
+  --borde: #243352;
+  --texto: #e8eefc;
+  --apagado: #93a4c4;
+  --acento: #2563eb;
+  --acento-claro: #38bdf8;
+  --ok: #10b981;
+  --alerta: #f59e0b;
+  --peligro: #ef4444;
+  --radio: 10px;
+  color-scheme: dark;
 }
-   *, *::before, *::after {
+
+*,
+*::before,
+*::after {
   box-sizing: border-box;
+}
+
+html,
+body,
+#app {
   margin: 0;
   padding: 0;
-}
-
-html, body, #app {
-  width: 100% !important;
-  max-width: 100% !important;
-  min-height: 100vh;
-  margin: 0 !important;
-  padding: 0 !important;
+  min-height: 100%;
+  width: 100%;
   overflow-x: hidden;
-  background-color: #0b1120;
-  color: #f1f5f9;
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
 }
 
-/* Scrollbar personalizado para navegadores WebKit */
+body {
+  background-color: var(--fondo);
+  color: var(--texto);
+  font-family:
+    system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  font-size: 15px;
+  line-height: 1.45;
+  -webkit-text-size-adjust: 100%;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  margin: 0;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+button {
+  font: inherit;
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+input,
+select,
+textarea {
+  font: inherit;
+  color: var(--texto);
+  background-color: #0b1324;
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+  padding: 0.55rem 0.7rem;
+  width: 100%;
+  min-width: 0;
+  outline: none;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+button:focus-visible,
+a:focus-visible {
+  border-color: var(--acento-claro);
+  box-shadow: 0 0 0 3px rgb(56 189 248 / 0.25);
+}
+
+textarea {
+  resize: vertical;
+}
+
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 8px;
+  height: 8px;
 }
 ::-webkit-scrollbar-track {
-  background: #0f172a;
+  background: var(--fondo);
 }
 ::-webkit-scrollbar-thumb {
-  background: #334155;
-  border-radius: 4px;
+  background: #2b3b5e;
+  border-radius: 8px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #475569;
+  background: #3a4e78;
 }
 
-/* ==========================================================================
-   2. CONTENEDOR PRINCIPAL
-   ========================================================================== */
-.gio-app {
-  width: 100%;
-  max-width: 100%;
-  min-height: 100vh;
-  padding: 1.25rem;
-  background-color: #0b1120;
-  color: #f1f5f9;
-}
-
-/* ==========================================================================
-   3. CABECERA PRINCIPAL (TOP BAR)
-   ========================================================================== */
-.top-bar {
-  display: flex;
-  justify-content: space-between;
+.gio-boton {
+  display: inline-flex;
   align-items: center;
-  background-color: #151e32;
-  padding: 1rem 1.5rem;
-  border-radius: 12px;
-  border: 1px solid #1e293b;
-  margin-bottom: 1.25rem;
-  width: 100%;
-}
-
-.brand-group {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-}
-
-.logo-badge {
-  background-color: #2563eb;
-  color: #ffffff;
-  font-weight: 800;
-  padding: 0.35rem 0.75rem;
-  border-radius: 8px;
-  font-size: 1rem;
-  letter-spacing: 1px;
-}
-
-.system-title {
-  font-size: 1.15rem;
-  font-weight: 700;
-  color: #ffffff;
-  letter-spacing: 0.5px;
-}
-
-.header-right {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-}
-
-.zone-selector, .filter-select {
-  background-color: #0f172a;
-  color: #f1f5f9;
-  border: 1px solid #334155;
-  padding: 0.5rem 0.85rem;
-  border-radius: 8px;
-  outline: none;
-  font-size: 0.85rem;
-  cursor: pointer;
-}
-
-.btn-primary-gio {
-  background-color: #2563eb;
-  color: #ffffff;
-  border: none;
-  padding: 0.55rem 1.1rem;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 0.55rem 1rem;
+  border: 1px solid transparent;
   border-radius: 8px;
   font-weight: 600;
-  font-size: 0.85rem;
-  cursor: pointer;
-  transition: background-color 0.2s;
+  font-size: 0.875rem;
+  white-space: nowrap;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    transform 0.08s ease;
 }
 
-.btn-primary-gio:hover {
+.gio-boton:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.gio-boton--primario {
+  background-color: var(--acento);
+  color: #fff;
+}
+.gio-boton--primario:hover:not(:disabled) {
   background-color: #1d4ed8;
 }
 
-/* ==========================================================================
-   4. METRICAS / KPIS
-   ========================================================================== */
-.kpi-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 1.25rem;
-  margin-bottom: 1.25rem;
-  width: 100%;
+.gio-boton--secundario {
+  background-color: transparent;
+  border-color: var(--borde);
+  color: var(--texto);
+}
+.gio-boton--secundario:hover:not(:disabled) {
+  background-color: var(--panel-alto);
 }
 
-.kpi-card {
-  background-color: #151e32;
-  border: 1px solid #1e293b;
-  border-radius: 12px;
-  padding: 1.25rem;
+.gio-boton--exito {
+  background-color: var(--ok);
+  color: #04281c;
+}
+.gio-boton--exito:hover:not(:disabled) {
+  background-color: #0ea571;
 }
 
-.kpi-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 0.5rem;
-}
-
-.kpi-title {
-  font-size: 0.8rem;
-  font-weight: 700;
-  color: #94a3b8;
-  letter-spacing: 0.5px;
-}
-
-.kpi-value {
-  font-size: 2.25rem;
-  font-weight: 800;
-  color: #ffffff;
-}
-
-.kpi-value.red-text, .red-text {
-  color: #ef4444 !important;
-}
-
-.kpi-badge {
-  background-color: rgba(239, 68, 68, 0.15);
-  color: #ef4444;
-  padding: 0.2rem 0.5rem;
-  border-radius: 6px;
-  font-size: 0.7rem;
-  font-weight: 700;
-}
-
-/* ==========================================================================
-   5. BARRA DE FILTROS Y CAMBIO DE VISTA
-   ========================================================================== */
-.filter-bar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  background-color: #151e32;
-  padding: 0.85rem 1.25rem;
-  border-radius: 12px;
-  border: 1px solid #1e293b;
-  margin-bottom: 1.25rem;
-  width: 100%;
-}
-
-.filters-left {
-  display: flex;
-  align-items: center;
-  gap: 0.85rem;
-}
-
-.filter-label {
-  color: #94a3b8;
-  font-size: 0.85rem;
-  font-weight: 600;
-}
-
-.view-toggle {
-  display: flex;
-  background-color: #0f172a;
-  padding: 3px;
-  border-radius: 8px;
-  border: 1px solid #334155;
-}
-
-.toggle-btn {
-  background: transparent;
-  border: none;
-  color: #94a3b8;
-  padding: 0.35rem 0.85rem;
-  border-radius: 6px;
-  cursor: pointer;
-  font-weight: 600;
-  font-size: 0.8rem;
-  transition: all 0.2s;
-}
-
-.toggle-btn.active {
-  background-color: #2563eb;
-  color: #ffffff;
-}
-
-/* ==========================================================================
-   6. TABLERO KANBAN Y TARJETAS
-   ========================================================================== */
-.kanban-wrapper {
-  width: 100%;
-  overflow-x: auto;
-}
-
-.kanban-board {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(250px, 1fr));
-  gap: 1rem;
-  align-items: start;
-  width: 100%;
-}
-
-.kanban-column {
-  background-color: #151e32;
-  border: 1px solid #1e293b;
-  border-radius: 12px;
-  padding: 0.85rem;
-  min-height: 550px;
-}
-
-.column-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding-bottom: 0.75rem;
-  margin-bottom: 0.85rem;
-  border-bottom: 1px solid #1e293b;
-  border-top: 3px solid transparent;
-}
-
-.column-title {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.column-title h3 {
-  font-size: 0.9rem;
-  font-weight: 700;
-  color: #f1f5f9;
-}
-
-.dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  display: inline-block;
-}
-
-.count-pill {
-  background-color: #0f172a;
-  color: #94a3b8;
-  padding: 0.15rem 0.5rem;
-  border-radius: 10px;
-  font-size: 0.75rem;
-  font-weight: 700;
-}
-
-.column-cards {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-  max-height: 65vh;
-  overflow-y: auto;
-  padding-right: 2px;
-}
-
-.kanban-card {
-  background-color: #0f172a;
-  border: 1px solid #1e293b;
-  border-radius: 8px;
-  padding: 0.85rem;
-  cursor: pointer;
-  transition: transform 0.15s, border-color 0.15s;
-}
-
-.kanban-card:hover {
-  transform: translateY(-2px);
-  border-color: #3b82f6;
-}
-
-.kanban-card.border-danger {
-  border-left: 3px solid #ef4444;
-}
-
-.card-top {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 0.5rem;
-}
-
-.folio-code {
-  color: #3b82f6;
-  font-weight: 700;
-  font-size: 0.85rem;
-}
-
-.status-tags {
-  display: flex;
-  gap: 0.35rem;
-}
-
-.tag {
-  font-size: 0.65rem;
-  padding: 0.15rem 0.35rem;
-  border-radius: 4px;
-  font-weight: 600;
-}
-
-.tag-down {
-  background-color: rgba(239, 68, 68, 0.2);
+.gio-boton--peligro {
+  background-color: transparent;
+  border-color: #7f1d1d;
   color: #fca5a5;
 }
-
-.tag-days {
-  background-color: #1e293b;
-  color: #cbd5e1;
+.gio-boton--peligro:hover:not(:disabled) {
+  background-color: rgb(239 68 68 / 0.12);
 }
 
-.card-client {
-  font-weight: 700;
-  font-size: 0.85rem;
-  color: #f8fafc;
-  margin-bottom: 0.35rem;
-  line-height: 1.25;
-}
-
-.card-cope {
-  font-size: 0.75rem;
-  color: #94a3b8;
-  margin-bottom: 0.75rem;
-}
-
-.card-cope strong {
-  color: #e2e8f0;
-}
-
-.card-footer {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding-top: 0.5rem;
-  border-top: 1px solid #1e293b;
-}
-
-.tech-info {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-}
-
-.tech-avatar {
-  background-color: #334155;
-  color: #f8fafc;
-  font-size: 0.65rem;
-  font-weight: 700;
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.tech-name {
-  font-size: 0.7rem;
-  color: #94a3b8;
-  font-weight: 500;
-  max-width: 130px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.arrow-icon {
-  color: #64748b;
-  font-size: 1rem;
-}
-
-/* ==========================================================================
-   7. VISTA TABLA
-   ========================================================================== */
-.table-container {
-  background-color: #151e32;
+.gio-boton--tactil {
+  min-height: 56px;
+  padding: 0.9rem 1.2rem;
+  font-size: 1.0625rem;
   border-radius: 12px;
-  border: 1px solid #1e293b;
-  padding: 1rem;
-  overflow-x: auto;
   width: 100%;
 }
 
-.styled-table {
-  width: 100%;
-  border-collapse: collapse;
-  text-align: left;
+.gio-panel {
+  background-color: var(--panel);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
 }
 
-.styled-table th {
-  background-color: #0f172a;
-  color: #94a3b8;
-  padding: 0.75rem 1rem;
-  font-size: 0.8rem;
+.gio-etiqueta {
+  display: block;
+  font-size: 0.75rem;
   font-weight: 600;
+  letter-spacing: 0.02em;
   text-transform: uppercase;
+  color: var(--apagado);
+  margin-bottom: 0.3rem;
 }
 
-.styled-table td {
-  padding: 0.75rem 1rem;
-  border-bottom: 1px solid #1e293b;
-  color: #e2e8f0;
-  font-size: 0.85rem;
+.gio-pastilla {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  border: 1px solid transparent;
 }
 
-.styled-table tr:hover {
-  background-color: rgba(255, 255, 255, 0.02);
+.gio-pastilla--pendiente {
+  background: rgb(249 115 22 / 0.16);
+  color: #fdba74;
+  border-color: rgb(249 115 22 / 0.4);
+}
+.gio-pastilla--asignado {
+  background: rgb(59 130 246 / 0.16);
+  color: #93c5fd;
+  border-color: rgb(59 130 246 / 0.4);
+}
+.gio-pastilla--en_proceso {
+  background: rgb(234 179 8 / 0.16);
+  color: #fde047;
+  border-color: rgb(234 179 8 / 0.4);
+}
+.gio-pastilla--liquidado {
+  background: rgb(16 185 129 / 0.16);
+  color: #6ee7b7;
+  border-color: rgb(16 185 129 / 0.4);
 }
 
-.btn-sm-edit {
-  background-color: #334155;
-  color: #f8fafc;
-  border: none;
-  padding: 0.3rem 0.65rem;
-  border-radius: 6px;
-  cursor: pointer;
+.gio-semaforo {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
   font-size: 0.75rem;
+  font-weight: 700;
+}
+.gio-semaforo::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: currentColor;
+}
+.gio-semaforo--normal {
+  color: #6ee7b7;
+}
+.gio-semaforo--alerta {
+  color: #fbbf24;
+}
+.gio-semaforo--critico {
+  color: #f87171;
+}
+.gio-semaforo--cerrado {
+  color: var(--apagado);
 }
 
-.btn-sm-edit:hover {
-  background-color: #475569;
+.gio-enlace {
+  font-weight: 800;
+  font-size: 0.6875rem;
+  letter-spacing: 0.05em;
+}
+.gio-enlace--up {
+  color: #34d399;
+}
+.gio-enlace--down {
+  color: #f87171;
+}
+.gio-enlace--desconocido {
+  color: var(--apagado);
 }
 
-/* ==========================================================================
-   8. MODAL DE FORMULARIO
-   ========================================================================== */
-.modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100vw;
-  height: 100vh;
-  background-color: rgba(0, 0, 0, 0.75);
+.gio-vacio {
+  text-align: center;
+  color: #64748b;
+  padding: 2rem 1rem;
+  font-size: 0.875rem;
+}
+
+.gio-cargando {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 999;
-  backdrop-filter: blur(4px);
+  gap: 0.6rem;
+  padding: 2.5rem;
+  color: var(--apagado);
+  font-size: 0.875rem;
 }
 
-.modal-box {
-  background-color: #151e32;
-  border: 1px solid #334155;
-  border-radius: 12px;
-  width: 90%;
-  max-width: 650px;
-  max-height: 90vh;
-  overflow-y: auto;
-  padding: 1.5rem;
+.gio-cargando::before {
+  content: '';
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--borde);
+  border-top-color: var(--acento-claro);
+  border-radius: 999px;
+  animation: gio-girar 0.8s linear infinite;
 }
 
-.modal-header {
-  display: flex;
-  justify-content: space-between;
+@keyframes gio-girar {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.gio-swal {
+  border: 1px solid var(--borde) !important;
+  border-radius: 14px !important;
+}
+.gio-swal__title {
+  font-size: 1.15rem !important;
+  color: var(--texto) !important;
+}
+.gio-swal__texto {
+  color: var(--apagado) !important;
+  font-size: 0.9rem !important;
+}
+.gio-swal__detalle {
+  text-align: left;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 220px;
+  overflow: auto;
+  background: #0b1324;
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+  padding: 0.6rem 0.75rem;
+  font-size: 0.78rem;
+  color: #cbd5e1;
+  margin: 0;
+}
+.gio-swal__btn {
+  display: inline-flex;
   align-items: center;
-  padding-bottom: 0.75rem;
-  border-bottom: 1px solid #1e293b;
-  margin-bottom: 1.25rem;
-}
-
-.modal-header h2 {
-  font-size: 1.1rem;
-  font-weight: 700;
-  color: #ffffff;
-}
-
-.btn-close {
-  background: transparent;
-  border: none;
-  color: #94a3b8;
-  font-size: 1.2rem;
-  cursor: pointer;
-}
-
-.form-section {
-  margin-bottom: 1rem;
-}
-
-.section-heading {
-  font-size: 0.75rem;
-  color: #3b82f6;
-  margin-bottom: 0.65rem;
-  font-weight: 700;
-  letter-spacing: 0.5px;
-}
-
-.form-row-3 {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 0.75rem;
-  margin-bottom: 0.75rem;
-}
-
-.form-row-2 {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 0.75rem;
-  margin-bottom: 0.75rem;
-}
-
-.form-group {
-  display: flex;
-  flex-direction: column;
-  gap: 0.3rem;
-}
-
-.form-group label {
-  font-size: 0.75rem;
-  color: #94a3b8;
-}
-
-.form-control {
-  background-color: #0f172a;
-  border: 1px solid #334155;
-  color: #f1f5f9;
-  padding: 0.5rem;
-  border-radius: 6px;
-  outline: none;
-  font-size: 0.85rem;
-}
-
-.form-control:focus {
-  border-color: #3b82f6;
-}
-
-.modal-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 0.75rem;
-  margin-top: 1.25rem;
-  padding-top: 1rem;
-  border-top: 1px solid #1e293b;
-}
-
-.btn-cancel {
-  background-color: transparent;
-  color: #94a3b8;
-  border: 1px solid #334155;
-  padding: 0.5rem 1rem;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 0.85rem;
-}
-
-.btn-submit {
-  background-color: #2563eb;
-  color: #ffffff;
-  border: none;
-  padding: 0.5rem 1rem;
-  border-radius: 6px;
-  cursor: pointer;
+  justify-content: center;
+  padding: 0.6rem 1.2rem;
+  margin: 0 0.3rem;
+  border: 1px solid transparent;
+  border-radius: 8px;
   font-weight: 600;
-  font-size: 0.85rem;
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+.gio-swal__btn--primario {
+  background-color: var(--acento);
+  color: #fff;
+}
+.gio-swal__btn--secundario {
+  background-color: transparent;
+  border-color: var(--borde);
+  color: var(--texto);
+}
+.gio-swal__btn--peligro {
+  background-color: var(--peligro);
+  color: #fff;
+}
+.swal2-input,
+.swal2-textarea {
+  background-color: #0b1324 !important;
+  border: 1px solid var(--borde) !important;
+  color: var(--texto) !important;
+  box-shadow: none !important;
+}
+.swal2-input-label,
+.swal2-validation-message {
+  color: var(--apagado) !important;
+  background: transparent !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }

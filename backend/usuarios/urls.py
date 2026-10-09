@@ -1,17 +1,15 @@
-from django.contrib import admin
-from django.urls import path, include
-from rest_framework_simplejwt.views import (
-    TokenObtainPairView,
-    TokenRefreshView,
-)
+from django.urls import include, path
+from rest_framework.routers import DefaultRouter
+
+from .views import CambiarPasswordView, LoginView, MiPerfilView, RefreshView, UsuarioViewSet
+
+router = DefaultRouter()
+router.register(r'usuarios', UsuarioViewSet, basename='usuario')
 
 urlpatterns = [
-    path('admin/', admin.site.urls),
-    
-    # Endpoints de Autenticación JWT
-    path('api/auth/login/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
-    path('api/auth/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
-    
-    # Incluir las rutas de tu app
-    path('api/', include('gio_app.urls')), # O la estructura que utilices para tus rutas
+    path('auth/login/', LoginView.as_view(), name='token_obtain_pair'),
+    path('auth/refresh/', RefreshView.as_view(), name='token_refresh'),
+    path('auth/me/', MiPerfilView.as_view(), name='mi-perfil'),
+    path('auth/password/', CambiarPasswordView.as_view(), name='cambiar-password'),
+    path('', include(router.urls)),
 ]

@@ -1,68 +1,169 @@
 <script setup>
-import { ref } from 'vue';
-import { useAuth } from '../composables/useAuth';
-import '../assets/loginstyle.css'
-const expediente = ref('');
-const password = ref('');
-const { iniciarSesion, cargando, errorLogin } = useAuth();
-const handleSubmit = async () => {
-  if (!expediente.value || !password.value) return;
-  await iniciarSesion(expediente.value, password.value);
-};
-// Accesos rápidos para probar diferentes roles durante el desarrollo
-const probarComo = (rol) => {
-  if (rol === 'PI') { expediente.value = 'OQU-8821'; password.value = '123456'; }
-  if (rol === 'PE') { expediente.value = 'TEC-4410'; password.value = '123456'; }
-  if (rol === 'ADMIN') { expediente.value = 'JEFE-001'; password.value = '123456'; }
-  handleSubmit();
-};
+import { onMounted, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { rutaInicialPara, useAuth } from '../composables/useAuth.js'
+
+const route = useRoute()
+const router = useRouter()
+const { iniciarSesion, cargando, errorLogin } = useAuth()
+
+const expediente = ref('')
+const password = ref('')
+const aviso = ref('')
+
+onMounted(() => {
+  if (route.query.expirada) aviso.value = 'Su sesión expiró. Vuelva a identificarse.'
+})
+
+const enviar = async () => {
+  aviso.value = ''
+  if (!expediente.value.trim() || !password.value) return
+  try {
+    const usuario = await iniciarSesion(expediente.value, password.value)
+    const destino = route.query.redirigir || rutaInicialPara(usuario?.rol)
+    await router.replace(destino)
+  } catch {
+    password.value = ''
+  }
+}
 </script>
+
 <template>
-  <div class="login-wrapper">
-    <div class="login-card">
-      <header class="login-header">
-        <div class="logo-badge">GIO</div>
-        <h2>GIO TELMEX</h2>
-        <p class="subtitle">CASE Puebla — Gestión de Incidencias Operativas</p>
+  <div class="acceso">
+    <section class="acceso__tarjeta gio-panel">
+      <header class="acceso__cabecera">
+        <span class="acceso__insignia">GIO</span>
+        <h1>Sistema GIO</h1>
+        <p>Gestión de Incidencias y Enlace Operativo — CASE Puebla</p>
       </header>
-      <form @submit.prevent="handleSubmit" class="login-form">
-        <div v-if="errorLogin" class="error-banner">
-          {{ errorLogin }}
-        </div>
-        <div class="form-group">
-          <label>Expediente / Usuario</label>
-          <input 
-            v-model="expediente" 
-            type="text" 
-            placeholder="Ej. OQU-9921" 
-            required 
+
+      <form class="acceso__forma" @submit.prevent="enviar">
+        <p v-if="aviso" class="acceso__aviso" role="status">{{ aviso }}</p>
+        <p v-if="errorLogin" class="acceso__error" role="alert">{{ errorLogin }}</p>
+
+        <div>
+          <label class="gio-etiqueta" for="expediente">Expediente</label>
+          <input
+            id="expediente"
+            v-model="expediente"
+            type="text"
+            inputmode="text"
             autocomplete="username"
+            autocapitalize="characters"
+            spellcheck="false"
+            placeholder="OQU-8821"
+            required
           />
         </div>
-        <div class="form-group">
-          <label>Contraseña</label>
-          <input 
-            v-model="password" 
-            type="password" 
-            placeholder="••••••••" 
-            required 
+
+        <div>
+          <label class="gio-etiqueta" for="password">Contraseña</label>
+          <input
+            id="password"
+            v-model="password"
+            type="password"
             autocomplete="current-password"
+            placeholder="••••••••"
+            required
           />
         </div>
-        <button type="submit" class="btn-login" :disabled="cargando">
-          <span v-if="!cargando">Iniciar Sesión</span>
-          <span v-else>Autenticando...</span>
+
+        <button
+          type="submit"
+          class="gio-boton gio-boton--primario gio-boton--tactil"
+          :disabled="cargando"
+        >
+          {{ cargando ? 'Autenticando…' : 'Iniciar sesión' }}
         </button>
       </form>
-      <!-- BOTONES DE PRUEBA RÁPIDA (SOLO PARA DESARROLLO) -->
-      <div class="demo-roles">
-        <small>Probar acceso como:</small>
-        <div class="role-buttons">
-          <button @click="probarComo('PI')" type="button" class="btn-role">Planta Interna</button>
-          <button @click="probarComo('PE')" type="button" class="btn-role">Técnico PE</button>
-          <button @click="probarComo('ADMIN')" type="button" class="btn-role">Jefatura</button>
-        </div>
-      </div>
-    </div>
+
+      <footer class="acceso__pie">
+        Acceso restringido al personal de Planta Interna y Planta Externa. Si olvidó su contraseña,
+        solicite el restablecimiento a la Gerencia.
+      </footer>
+    </section>
   </div>
 </template>
+
+<style scoped>
+.acceso {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 1.25rem;
+  background:
+    radial-gradient(circle at 15% 15%, rgb(37 99 235 / 0.18), transparent 45%),
+    radial-gradient(circle at 85% 80%, rgb(56 189 248 / 0.12), transparent 40%),
+    var(--fondo);
+}
+
+.acceso__tarjeta {
+  width: 100%;
+  max-width: 400px;
+  padding: 1.75rem;
+}
+
+.acceso__cabecera {
+  text-align: center;
+  margin-bottom: 1.5rem;
+}
+
+.acceso__insignia {
+  display: grid;
+  place-items: center;
+  width: 54px;
+  height: 54px;
+  margin: 0 auto 0.85rem;
+  border-radius: 14px;
+  background: linear-gradient(140deg, #2563eb, #38bdf8);
+  color: #fff;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+}
+
+.acceso__cabecera h1 {
+  font-size: 1.35rem;
+}
+
+.acceso__cabecera p {
+  margin: 0.35rem 0 0;
+  font-size: 0.8125rem;
+  color: var(--apagado);
+}
+
+.acceso__forma {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.acceso__aviso,
+.acceso__error {
+  margin: 0;
+  padding: 0.6rem 0.75rem;
+  border-radius: 8px;
+  font-size: 0.8125rem;
+  white-space: pre-line;
+}
+
+.acceso__aviso {
+  background: rgb(245 158 11 / 0.12);
+  border: 1px solid rgb(245 158 11 / 0.4);
+  color: #fcd34d;
+}
+
+.acceso__error {
+  background: rgb(239 68 68 / 0.12);
+  border: 1px solid rgb(239 68 68 / 0.4);
+  color: #fca5a5;
+}
+
+.acceso__pie {
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--borde);
+  font-size: 0.72rem;
+  color: #64748b;
+  text-align: center;
+}
+</style>
