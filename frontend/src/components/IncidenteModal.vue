@@ -637,7 +637,7 @@ onUnmounted(() => document.removeEventListener('keydown', alPulsarTecla))
   justify-content: space-between;
   gap: 1rem;
   padding: 0.9rem 1.2rem;
-  background-color: #0a1222;
+  background-color: var(--superficie);
   border-bottom: 1px solid var(--borde);
 }
 
@@ -692,7 +692,7 @@ onUnmounted(() => document.removeEventListener('keydown', alPulsarTecla))
 
 .pestanas {
   display: flex;
-  background-color: #0a1222;
+  background-color: var(--superficie);
   border-bottom: 1px solid var(--borde);
   overflow-x: auto;
 }
@@ -748,19 +748,19 @@ onUnmounted(() => document.removeEventListener('keydown', alPulsarTecla))
 .campo select:disabled,
 .campo textarea:disabled {
   opacity: 0.6;
-  background-color: #0a1222;
+  background-color: var(--superficie);
 }
 
 .campo__error {
   margin-top: 0.25rem;
   font-size: 0.72rem;
-  color: #fca5a5;
+  color: var(--rojo-texto);
 }
 
 .campo__pista {
   margin-top: 0.25rem;
   font-size: 0.68rem;
-  color: #64748b;
+  color: var(--tenue);
 }
 
 .caja__pie {
@@ -783,7 +783,7 @@ onUnmounted(() => document.removeEventListener('keydown', alPulsarTecla))
 }
 
 .historia__item {
-  background-color: #0a1222;
+  background-color: var(--superficie);
   border: 1px solid var(--borde);
   border-left: 3px solid var(--acento);
   border-radius: 8px;
@@ -810,7 +810,7 @@ onUnmounted(() => document.removeEventListener('keydown', alPulsarTecla))
 
 .historia__autor {
   font-size: 0.68rem;
-  color: #64748b;
+  color: var(--tenue);
 }
 
 @media (max-width: 680px) {

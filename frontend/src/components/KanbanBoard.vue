@@ -165,7 +165,7 @@ const soltar = (evento, idColumna) => {
   align-items: center;
   justify-content: space-between;
   padding: 0.7rem 0.9rem;
-  background-color: #0a1222;
+  background-color: var(--superficie);
   border-top: 3px solid var(--acento);
   border-bottom: 1px solid var(--borde);
   border-radius: var(--radio) var(--radio) 0 0;
@@ -180,7 +180,7 @@ const soltar = (evento, idColumna) => {
 
 .tablero__conteo {
   background-color: var(--panel-alto);
-  color: #cbd5e1;
+  color: var(--texto-suave);
   font-size: 0.72rem;
   font-weight: 700;
   padding: 0.1rem 0.5rem;
@@ -196,7 +196,7 @@ const soltar = (evento, idColumna) => {
 }
 
 .ficha {
-  background-color: #0a1222;
+  background-color: var(--superficie);
   border: 1px solid var(--borde);
   border-left: 3px solid var(--borde);
   border-radius: 8px;
@@ -261,7 +261,7 @@ const soltar = (evento, idColumna) => {
 }
 
 .ficha__datos dt {
-  color: #64748b;
+  color: var(--tenue);
   min-width: 52px;
 }
 
@@ -284,7 +284,7 @@ const soltar = (evento, idColumna) => {
 }
 
 .ficha__servicio {
-  color: #64748b;
+  color: var(--tenue);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -298,21 +298,21 @@ const soltar = (evento, idColumna) => {
 }
 
 .ficha__evidencias {
-  color: #a5b4fc;
+  color: var(--indigo-texto);
   font-weight: 600;
 }
 
 .ficha__mttr {
   margin: 0.45rem 0 0;
   font-size: 0.6875rem;
-  color: #6ee7b7;
+  color: var(--verde-texto);
   display: flex;
   gap: 0.4rem;
   align-items: center;
 }
 
 .ficha__pendiente {
-  color: #fcd34d;
+  color: var(--ambar-texto);
   border: 1px solid rgb(245 158 11 / 0.4);
   border-radius: 999px;
   padding: 0 0.35rem;

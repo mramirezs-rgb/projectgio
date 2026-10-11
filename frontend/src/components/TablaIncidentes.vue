@@ -167,7 +167,7 @@ const alternarTodo = (evento) => {
 }
 
 .tabla th {
-  background-color: #0a1222;
+  background-color: var(--superficie);
   color: var(--apagado);
   padding: 0.7rem 0.85rem;
   font-weight: 600;
@@ -243,7 +243,7 @@ const alternarTodo = (evento) => {
 
 .tabla__sub {
   display: block;
-  color: #64748b;
+  color: var(--tenue);
   font-size: 0.7rem;
 }
 

@@ -284,7 +284,7 @@ const exportarTecnico = () => {
   border-radius: 8px;
   background: rgb(239 68 68 / 0.12);
   border: 1px solid rgb(239 68 68 / 0.4);
-  color: #fca5a5;
+  color: var(--rojo-texto);
   font-size: 0.8125rem;
 }
 
@@ -321,12 +321,12 @@ const exportarTecnico = () => {
 }
 
 .tarjeta__rojo {
-  color: #f87171;
+  color: var(--rojo-vivo);
 }
 
 .tarjeta small {
   font-size: 0.68rem;
-  color: #64748b;
+  color: var(--tenue);
 }
 
 .bloque {
@@ -371,7 +371,7 @@ const exportarTecnico = () => {
 
 .barras__pista {
   height: 8px;
-  background-color: #0b1324;
+  background-color: var(--campo);
   border-radius: 999px;
   overflow: hidden;
 }

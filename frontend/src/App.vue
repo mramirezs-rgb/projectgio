@@ -1,6 +1,7 @@
 <script setup>
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import BotonTema from './components/BotonTema.vue'
 import { ROLES, useAuth } from './composables/useAuth.js'
 import { confirmarAccion } from './utils/alerts.js'
 
@@ -60,9 +61,12 @@ const salir = async () => {
           <span class="barra__nombre">{{ usuario?.nombre || usuario?.expediente }}</span>
           <span class="barra__rol">{{ ETIQUETAS_ROL[rol] || rol }}</span>
         </div>
+        <BotonTema />
         <button type="button" class="gio-boton gio-boton--secundario" @click="salir">Salir</button>
       </div>
     </header>
+
+    <BotonTema v-else class="tema-flotante" />
 
     <main :class="estaAutenticado ? 'contenido' : 'contenido contenido--limpio'">
       <RouterView />
@@ -83,7 +87,7 @@ const salir = async () => {
   align-items: center;
   gap: 0.75rem 1.25rem;
   padding: 0.6rem 1rem;
-  background-color: #060c18;
+  background-color: var(--barra);
   border-bottom: 1px solid var(--borde);
   position: sticky;
   top: 0;
@@ -173,6 +177,14 @@ const salir = async () => {
   color: var(--acento-claro);
   text-transform: uppercase;
   letter-spacing: 0.04em;
+}
+
+.tema-flotante {
+  position: fixed;
+  top: 0.75rem;
+  right: 0.75rem;
+  z-index: 40;
+  background-color: var(--panel);
 }
 
 .contenido {

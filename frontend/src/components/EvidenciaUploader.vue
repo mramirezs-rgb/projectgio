@@ -212,14 +212,14 @@ const quitar = async (evidencia) => {
 .evidencias__problema {
   background: rgb(239 68 68 / 0.12);
   border: 1px solid rgb(239 68 68 / 0.4);
-  color: #fca5a5;
+  color: var(--rojo-texto);
   white-space: pre-line;
 }
 
 .evidencias__resumen {
   background: rgb(16 185 129 / 0.1);
   border: 1px solid rgb(16 185 129 / 0.3);
-  color: #6ee7b7;
+  color: var(--verde-texto);
 }
 
 .evidencias__galeria {
@@ -232,7 +232,7 @@ const quitar = async (evidencia) => {
 }
 
 .evidencias__item {
-  background-color: #0a1222;
+  background-color: var(--superficie);
   border: 1px solid var(--borde);
   border-radius: 8px;
   overflow: hidden;

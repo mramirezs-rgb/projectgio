@@ -14,20 +14,66 @@
   --color-gio-peligro: #ef4444;
 }
 
+/* Tema oscuro (por omisión). El tema se elige con data-theme en <html>; ver useTema.js. */
 :root {
   --fondo: #0b1120;
   --panel: #101a2e;
   --panel-alto: #16233d;
+  --superficie: #0a1222;
+  --campo: #0b1324;
+  --barra: #060c18;
   --borde: #243352;
   --texto: #e8eefc;
+  --texto-suave: #cbd5e1;
   --apagado: #93a4c4;
+  --tenue: #64748b;
   --acento: #2563eb;
   --acento-claro: #38bdf8;
   --ok: #10b981;
   --alerta: #f59e0b;
   --peligro: #ef4444;
+  --verde-texto: #6ee7b7;
+  --verde-vivo: #34d399;
+  --rojo-texto: #fca5a5;
+  --rojo-vivo: #f87171;
+  --ambar-texto: #fcd34d;
+  --ambar-vivo: #fbbf24;
+  --amarillo-texto: #fde047;
+  --naranja-texto: #fdba74;
+  --azul-texto: #93c5fd;
+  --indigo-texto: #a5b4fc;
+  --scroll: #2b3b5e;
+  --scroll-hover: #3a4e78;
   --radio: 10px;
   color-scheme: dark;
+}
+
+:root[data-theme='light'] {
+  --fondo: #f1f5f9;
+  --panel: #ffffff;
+  --panel-alto: #e8eef6;
+  --superficie: #f8fafc;
+  --campo: #ffffff;
+  --barra: #ffffff;
+  --borde: #d3dce8;
+  --texto: #0f172a;
+  --texto-suave: #334155;
+  --apagado: #475569;
+  --tenue: #64748b;
+  --acento-claro: #0369a1;
+  --verde-texto: #047857;
+  --verde-vivo: #059669;
+  --rojo-texto: #b91c1c;
+  --rojo-vivo: #dc2626;
+  --ambar-texto: #b45309;
+  --ambar-vivo: #d97706;
+  --amarillo-texto: #a16207;
+  --naranja-texto: #c2410c;
+  --azul-texto: #1d4ed8;
+  --indigo-texto: #4338ca;
+  --scroll: #cbd5e1;
+  --scroll-hover: #94a3b8;
+  color-scheme: light;
 }
 
 *,
@@ -80,7 +126,7 @@ select,
 textarea {
   font: inherit;
   color: var(--texto);
-  background-color: #0b1324;
+  background-color: var(--campo);
   border: 1px solid var(--borde);
   border-radius: 8px;
   padding: 0.55rem 0.7rem;
@@ -113,11 +159,11 @@ textarea {
   background: var(--fondo);
 }
 ::-webkit-scrollbar-thumb {
-  background: #2b3b5e;
+  background: var(--scroll);
   border-radius: 8px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #3a4e78;
+  background: var(--scroll-hover);
 }
 
 .gio-boton {
@@ -169,7 +215,7 @@ textarea {
 .gio-boton--peligro {
   background-color: transparent;
   border-color: #7f1d1d;
-  color: #fca5a5;
+  color: var(--rojo-texto);
 }
 .gio-boton--peligro:hover:not(:disabled) {
   background-color: rgb(239 68 68 / 0.12);
@@ -214,22 +260,22 @@ textarea {
 
 .gio-pastilla--pendiente {
   background: rgb(249 115 22 / 0.16);
-  color: #fdba74;
+  color: var(--naranja-texto);
   border-color: rgb(249 115 22 / 0.4);
 }
 .gio-pastilla--asignado {
   background: rgb(59 130 246 / 0.16);
-  color: #93c5fd;
+  color: var(--azul-texto);
   border-color: rgb(59 130 246 / 0.4);
 }
 .gio-pastilla--en_proceso {
   background: rgb(234 179 8 / 0.16);
-  color: #fde047;
+  color: var(--amarillo-texto);
   border-color: rgb(234 179 8 / 0.4);
 }
 .gio-pastilla--liquidado {
   background: rgb(16 185 129 / 0.16);
-  color: #6ee7b7;
+  color: var(--verde-texto);
   border-color: rgb(16 185 129 / 0.4);
 }
 
@@ -248,13 +294,13 @@ textarea {
   background: currentColor;
 }
 .gio-semaforo--normal {
-  color: #6ee7b7;
+  color: var(--verde-texto);
 }
 .gio-semaforo--alerta {
-  color: #fbbf24;
+  color: var(--ambar-vivo);
 }
 .gio-semaforo--critico {
-  color: #f87171;
+  color: var(--rojo-vivo);
 }
 .gio-semaforo--cerrado {
   color: var(--apagado);
@@ -266,10 +312,10 @@ textarea {
   letter-spacing: 0.05em;
 }
 .gio-enlace--up {
-  color: #34d399;
+  color: var(--verde-vivo);
 }
 .gio-enlace--down {
-  color: #f87171;
+  color: var(--rojo-vivo);
 }
 .gio-enlace--desconocido {
   color: var(--apagado);
@@ -277,7 +323,7 @@ textarea {
 
 .gio-vacio {
   text-align: center;
-  color: #64748b;
+  color: var(--tenue);
   padding: 2rem 1rem;
   font-size: 0.875rem;
 }
@@ -326,12 +372,12 @@ textarea {
   word-break: break-word;
   max-height: 220px;
   overflow: auto;
-  background: #0b1324;
+  background: var(--campo);
   border: 1px solid var(--borde);
   border-radius: 8px;
   padding: 0.6rem 0.75rem;
   font-size: 0.78rem;
-  color: #cbd5e1;
+  color: var(--texto-suave);
   margin: 0;
 }
 .gio-swal__btn {
@@ -361,7 +407,7 @@ textarea {
 }
 .swal2-input,
 .swal2-textarea {
-  background-color: #0b1324 !important;
+  background-color: var(--campo) !important;
   border: 1px solid var(--borde) !important;
   color: var(--texto) !important;
   box-shadow: none !important;

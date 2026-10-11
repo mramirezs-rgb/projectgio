@@ -1,8 +1,8 @@
 import Swal from 'sweetalert2'
 
 const GioSwal = Swal.mixin({
-  background: '#101a2e',
-  color: '#e8eefc',
+  background: 'var(--panel)',
+  color: 'var(--texto)',
   customClass: {
     popup: 'gio-swal',
     title: 'gio-swal__title',
