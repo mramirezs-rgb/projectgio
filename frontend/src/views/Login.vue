@@ -149,13 +149,13 @@ const enviar = async () => {
 .acceso__aviso {
   background: rgb(245 158 11 / 0.12);
   border: 1px solid rgb(245 158 11 / 0.4);
-  color: #fcd34d;
+  color: var(--ambar-texto);
 }
 
 .acceso__error {
   background: rgb(239 68 68 / 0.12);
   border: 1px solid rgb(239 68 68 / 0.4);
-  color: #fca5a5;
+  color: var(--rojo-texto);
 }
 
 .acceso__pie {
@@ -163,7 +163,7 @@ const enviar = async () => {
   padding-top: 1rem;
   border-top: 1px solid var(--borde);
   font-size: 0.72rem;
-  color: #64748b;
+  color: var(--tenue);
   text-align: center;
 }
 </style>

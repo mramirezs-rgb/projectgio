@@ -379,7 +379,7 @@ const mapa = (direccion) =>
   border-radius: 8px;
   background: rgb(239 68 68 / 0.12);
   border: 1px solid rgb(239 68 68 / 0.4);
-  color: #fca5a5;
+  color: var(--rojo-texto);
   font-size: 0.8125rem;
 }
 
@@ -421,7 +421,7 @@ const mapa = (direccion) =>
 }
 
 .resumen--critico strong {
-  color: #f87171;
+  color: var(--rojo-vivo);
 }
 
 .tarjetas {
@@ -489,7 +489,7 @@ const mapa = (direccion) =>
 
 .tarjeta__evidencias {
   font-size: 0.72rem;
-  color: #a5b4fc;
+  color: var(--indigo-texto);
   font-weight: 600;
 }
 
@@ -505,7 +505,7 @@ const mapa = (direccion) =>
   display: flex;
   flex-direction: column;
   gap: 1rem;
-  background-color: #0a1222;
+  background-color: var(--superficie);
 }
 
 .detalle__datos {
@@ -525,7 +525,7 @@ const mapa = (direccion) =>
   font-size: 0.68rem;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: #64748b;
+  color: var(--tenue);
 }
 
 .detalle__datos dd {
@@ -552,7 +552,7 @@ const mapa = (direccion) =>
 .detalle__cerrado {
   margin: 0;
   font-size: 0.8125rem;
-  color: #6ee7b7;
+  color: var(--verde-texto);
   font-weight: 600;
 }
 
@@ -560,7 +560,7 @@ const mapa = (direccion) =>
   margin: 0;
   font-size: 0.875rem;
   color: var(--apagado);
-  background-color: #0b1324;
+  background-color: var(--campo);
   border: 1px solid var(--borde);
   border-radius: 8px;
   padding: 0.65rem 0.75rem;

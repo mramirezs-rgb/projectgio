@@ -333,7 +333,7 @@ const alternarActivo = async (usuario) => {
   border-radius: 8px;
   background: rgb(239 68 68 / 0.12);
   border: 1px solid rgb(239 68 68 / 0.4);
-  color: #fca5a5;
+  color: var(--rojo-texto);
   font-size: 0.8125rem;
 }
 
@@ -349,7 +349,7 @@ const alternarActivo = async (usuario) => {
 
 .listado th {
   text-align: left;
-  background-color: #0a1222;
+  background-color: var(--superficie);
   padding: 0.65rem 0.8rem;
   font-size: 0.68rem;
   text-transform: uppercase;
@@ -420,7 +420,7 @@ const alternarActivo = async (usuario) => {
   align-items: center;
   justify-content: space-between;
   padding: 0.9rem 1.2rem;
-  background-color: #0a1222;
+  background-color: var(--superficie);
   border-bottom: 1px solid var(--borde);
 }
 

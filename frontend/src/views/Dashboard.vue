@@ -529,12 +529,12 @@ const ordenar = async (campo) => {
 }
 
 .indicador__valor--rojo {
-  color: #f87171;
+  color: var(--rojo-vivo);
 }
 
 .indicador small {
   font-size: 0.68rem;
-  color: #64748b;
+  color: var(--tenue);
 }
 
 .filtros {
