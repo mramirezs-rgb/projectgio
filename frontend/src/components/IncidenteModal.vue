@@ -129,16 +129,6 @@ watch(
   { immediate: true, deep: true },
 )
 
-watch(
-  () => props.modelo?.id,
-  (id) => {
-    evidencias.value = props.modelo?.evidencias || []
-    bitacora.value = []
-    if (id) cargarAnexos()
-  },
-  { immediate: true },
-)
-
 const cargarAnexos = async () => {
   if (!props.modelo?.id) return
   cargandoAnexos.value = true
@@ -156,6 +146,17 @@ const cargarAnexos = async () => {
     cargandoAnexos.value = false
   }
 }
+
+// Debe ir después de cargarAnexos: con immediate se ejecuta al crear el componente.
+watch(
+  () => props.modelo?.id,
+  (id) => {
+    evidencias.value = props.modelo?.evidencias || []
+    bitacora.value = []
+    if (id) cargarAnexos()
+  },
+  { immediate: true },
+)
 
 const validar = () => {
   const fallos = {}
