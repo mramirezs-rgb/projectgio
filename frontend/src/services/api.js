@@ -17,9 +17,10 @@ export const registrarCaducidadSesion = (manejador) => {
   alCaducarSesion = manejador
 }
 
+// La sesión vive en sessionStorage: cada pestaña tiene la suya y se descarta al cerrarla.
 const leer = (clave) => {
   try {
-    return localStorage.getItem(clave)
+    return sessionStorage.getItem(clave)
   } catch {
     return null
   }
@@ -27,11 +28,18 @@ const leer = (clave) => {
 
 const escribir = (clave, valor) => {
   try {
-    if (valor === null || valor === undefined) localStorage.removeItem(clave)
-    else localStorage.setItem(clave, valor)
+    if (valor === null || valor === undefined) sessionStorage.removeItem(clave)
+    else sessionStorage.setItem(clave, valor)
   } catch {
     /* almacenamiento no disponible */
   }
+}
+
+// Versiones anteriores guardaban la sesión en localStorage, compartida entre pestañas.
+try {
+  for (const clave of [CLAVE_TOKEN, CLAVE_REFRESH, CLAVE_USUARIO]) localStorage.removeItem(clave)
+} catch {
+  /* almacenamiento no disponible */
 }
 
 export const guardarSesion = ({ access, refresh, usuario }) => {
