@@ -24,7 +24,7 @@ const AREAS_BASE = [
   'PACHUCA',
   'VERACRUZ',
   'POZA RICA',
-  'XALAPA',
+  'JALAPA',
   'TLAXCALA',
   'CORDOBA',
   'COATZACOALCOS',

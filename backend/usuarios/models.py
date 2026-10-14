@@ -17,7 +17,7 @@ class UsuarioGIO(AbstractUser):
         PACHUCA = 'PACHUCA', 'Pachuca'
         VERACRUZ = 'VERACRUZ', 'Veracruz'
         POZA_RICA = 'POZA RICA', 'Poza Rica'
-        XALAPA = 'XALAPA', 'Xalapa'
+        JALAPA = 'JALAPA', 'Jalapa'
         TLAXCALA = 'TLAXCALA', 'Tlaxcala'
         CORDOBA = 'CORDOBA', 'Córdoba'
         COATZACOALCOS = 'COATZACOALCOS', 'Coatzacoalcos'

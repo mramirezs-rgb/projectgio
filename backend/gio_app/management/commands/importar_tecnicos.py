@@ -8,7 +8,7 @@ from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
-from ._sisa import leer_tabla, primer_valor
+from ._sisa import leer_tabla, normalizar_telefono, primer_valor
 
 UsuarioGIO = get_user_model()
 
@@ -70,44 +70,63 @@ class Command(BaseCommand):
         if not rutas:
             raise CommandError('No se encontraron reportes SISA para analizar.')
 
-        existentes = set()
+        existentes = {}
         for usuario in UsuarioGIO.objects.all():
-            existentes.add(usuario.expediente.upper())
-            existentes.add(usuario.username.upper())
-            existentes.add(' '.join(usuario.get_full_name().split()).upper())
+            for clave in (usuario.expediente.upper(), usuario.username.upper(),
+                          ' '.join(usuario.get_full_name().split()).upper()):
+                if clave:
+                    existentes.setdefault(clave, usuario)
 
-        nombres = set()
+        # Nombre -> teléfono para las altas; técnicos existentes a los que les falta teléfono.
+        nuevos = {}
+        por_completar = {}
         for ruta in rutas:
             marco = leer_tabla(ruta)
             for _, cruda in marco.iterrows():
                 fila = {str(k): v for k, v in cruda.items()}
                 nombre = primer_valor(fila, ['TECNICO ASIGNADO', 'TECNICO', 'RESPONSABLE'])
                 nombre = ' '.join(nombre.split()).upper()
-                if nombre and nombre not in existentes and len(nombre.split()) >= 2:
-                    nombres.add(nombre)
+                telefono = normalizar_telefono(primer_valor(fila, ['TELEFONO TECNICO', 'TELEFONO']))
+                if not nombre:
+                    continue
+                usuario = existentes.get(nombre)
+                if usuario:
+                    if telefono and not usuario.telefono and usuario.es_tecnico:
+                        por_completar.setdefault(usuario.pk, (usuario, telefono))
+                    continue
+                if len(nombre.split()) >= 2 and not nuevos.get(nombre):
+                    nuevos[nombre] = telefono
 
-        if not nombres:
-            self.stdout.write(self.style.SUCCESS('Todos los técnicos del reporte ya existen en GIO.'))
+        if not nuevos and not por_completar:
+            self.stdout.write(self.style.SUCCESS(
+                'Todos los técnicos del reporte ya existen en GIO y tienen teléfono.'))
             return
 
         usados = set()
         propuestas = []
-        for nombre in sorted(nombres):
+        for nombre in sorted(nuevos):
             primero, apellidos = partir_nombre(nombre)
-            propuestas.append((expediente_desde_nombre(nombre, usados), primero, apellidos))
+            propuestas.append((expediente_desde_nombre(nombre, usados), primero, apellidos,
+                               nuevos[nombre]))
 
-        self.stdout.write(f'{len(propuestas)} técnico(s) sin usuario GIO:')
-        for expediente, primero, apellidos in propuestas:
-            self.stdout.write(f'  {expediente:<20} {primero} {apellidos}')
+        if propuestas:
+            self.stdout.write(f'{len(propuestas)} técnico(s) sin usuario GIO:')
+            for expediente, primero, apellidos, telefono in propuestas:
+                self.stdout.write(
+                    f'  {expediente:<20} {primero} {apellidos}  tel. {telefono or "sin teléfono"}')
+        if por_completar:
+            self.stdout.write(f'{len(por_completar)} técnico(s) existente(s) sin teléfono:')
+            for usuario, telefono in por_completar.values():
+                self.stdout.write(f'  {usuario.expediente:<20} {usuario.nombre_completo}  tel. {telefono}')
 
         if not opciones['confirmar']:
             self.stdout.write(self.style.WARNING(
-                '\nRevise la lista y vuelva a ejecutar con --confirmar para dar de alta.'))
+                '\nRevise la lista y vuelva a ejecutar con --confirmar para aplicar los cambios.'))
             return
 
         credenciales = []
         with transaction.atomic():
-            for expediente, primero, apellidos in propuestas:
+            for expediente, primero, apellidos, telefono in propuestas:
                 password = opciones['password'] or password_aleatoria()
                 UsuarioGIO.objects.create_user(
                     expediente=expediente,
@@ -116,9 +135,17 @@ class Command(BaseCommand):
                     last_name=apellidos[:150],
                     rol=UsuarioGIO.Rol.TECNICO,
                     area_operativa=(opciones['area'] or '').upper(),
+                    telefono=telefono,
                 )
                 credenciales.append((expediente, f'{primero} {apellidos}'.strip(), password))
+            for usuario, telefono in por_completar.values():
+                usuario.telefono = telefono
+                usuario.save(update_fields=['telefono'])
 
-        self.stdout.write(self.style.SUCCESS(f'\n{len(credenciales)} usuario(s) creado(s):'))
-        for expediente, nombre, password in credenciales:
-            self.stdout.write(f'  {expediente:<20} {nombre:<40} {password}')
+        if credenciales:
+            self.stdout.write(self.style.SUCCESS(f'\n{len(credenciales)} usuario(s) creado(s):'))
+            for expediente, nombre, password in credenciales:
+                self.stdout.write(f'  {expediente:<20} {nombre:<40} {password}')
+        if por_completar:
+            self.stdout.write(self.style.SUCCESS(
+                f'\nTeléfono vinculado a {len(por_completar)} técnico(s) existente(s).'))
