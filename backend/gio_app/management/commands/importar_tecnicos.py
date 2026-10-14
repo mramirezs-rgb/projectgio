@@ -30,14 +30,14 @@ def partir_nombre(nombre_completo):
     return nombre_completo, ''
 
 
-def expediente_desde_nombre(nombre_completo, usados):
+def expediente_desde_nombre(nombre_completo, usados, prefijo='TEC'):
     base = sin_acentos(nombre_completo).upper().split()
-    iniciales = ''.join(parte[0] for parte in base[:3]) or 'TEC'
-    candidato = f'TEC-{iniciales}'[:20]
+    iniciales = ''.join(parte[0] for parte in base[:3]) or prefijo
+    candidato = f'{prefijo}-{iniciales}'[:20]
     sufijo = 1
     while candidato in usados or UsuarioGIO.objects.filter(expediente=candidato).exists():
         sufijo += 1
-        candidato = f'TEC-{iniciales}{sufijo}'[:20]
+        candidato = f'{prefijo}-{iniciales}{sufijo}'[:20]
     usados.add(candidato)
     return candidato
 
@@ -48,8 +48,9 @@ def password_aleatoria(longitud=14):
 
 
 class Command(BaseCommand):
-    help = ('Da de alta usuarios con rol TECNICO a partir de la columna TECNICO ASIGNADO de los '
-            'reportes SISA. Sin --confirmar solo muestra la propuesta de altas.')
+    help = ('Da de alta a los técnicos de los reportes SISA: planta externa desde TECNICO ASIGNADO '
+            '(con su TELEFONO TECNICO) y planta interna desde OQU. Sin --confirmar solo muestra '
+            'la propuesta.')
 
     def add_arguments(self, parser):
         parser.add_argument('--archivo', help='Reporte SISA a leer.')
@@ -77,25 +78,31 @@ class Command(BaseCommand):
                 if clave:
                     existentes.setdefault(clave, usuario)
 
-        # Nombre -> teléfono para las altas; técnicos existentes a los que les falta teléfono.
+        # Nombre -> (rol, teléfono) para las altas; técnicos existentes a los que les falta teléfono.
         nuevos = {}
         por_completar = {}
         for ruta in rutas:
             marco = leer_tabla(ruta)
             for _, cruda in marco.iterrows():
                 fila = {str(k): v for k, v in cruda.items()}
-                nombre = primer_valor(fila, ['TECNICO ASIGNADO', 'TECNICO', 'RESPONSABLE'])
-                nombre = ' '.join(nombre.split()).upper()
+                externo = primer_valor(fila, ['TECNICO ASIGNADO', 'TECNICO', 'RESPONSABLE'])
                 telefono = normalizar_telefono(primer_valor(fila, ['TELEFONO TECNICO', 'TELEFONO']))
-                if not nombre:
-                    continue
-                usuario = existentes.get(nombre)
-                if usuario:
-                    if telefono and not usuario.telefono and usuario.es_tecnico:
-                        por_completar.setdefault(usuario.pk, (usuario, telefono))
-                    continue
-                if len(nombre.split()) >= 2 and not nuevos.get(nombre):
-                    nuevos[nombre] = telefono
+                candidatos = (
+                    (externo, UsuarioGIO.Rol.TECNICO, telefono),
+                    (primer_valor(fila, ['OQU']), UsuarioGIO.Rol.PI_EVALUADOR, ''),
+                )
+                for nombre, rol, telefono_fila in candidatos:
+                    nombre = ' '.join(nombre.split()).upper()
+                    if not nombre:
+                        continue
+                    usuario = existentes.get(nombre)
+                    if usuario:
+                        if telefono_fila and not usuario.telefono and usuario.es_tecnico:
+                            por_completar.setdefault(usuario.pk, (usuario, telefono_fila))
+                        continue
+                    if len(nombre.split()) >= 2:
+                        rol_previo, telefono_previo = nuevos.get(nombre, (rol, ''))
+                        nuevos[nombre] = (rol_previo, telefono_previo or telefono_fila)
 
         if not nuevos and not por_completar:
             self.stdout.write(self.style.SUCCESS(
@@ -105,15 +112,18 @@ class Command(BaseCommand):
         usados = set()
         propuestas = []
         for nombre in sorted(nuevos):
+            rol, telefono = nuevos[nombre]
+            prefijo = 'OQU' if rol == UsuarioGIO.Rol.PI_EVALUADOR else 'TEC'
             primero, apellidos = partir_nombre(nombre)
-            propuestas.append((expediente_desde_nombre(nombre, usados), primero, apellidos,
-                               nuevos[nombre]))
+            propuestas.append((expediente_desde_nombre(nombre, usados, prefijo), primero,
+                               apellidos, rol, telefono))
 
         if propuestas:
             self.stdout.write(f'{len(propuestas)} técnico(s) sin usuario GIO:')
-            for expediente, primero, apellidos, telefono in propuestas:
+            for expediente, primero, apellidos, rol, telefono in propuestas:
                 self.stdout.write(
-                    f'  {expediente:<20} {primero} {apellidos}  tel. {telefono or "sin teléfono"}')
+                    f'  {expediente:<20} {primero} {apellidos}  [{UsuarioGIO.Rol(rol).label}]'
+                    f'  tel. {telefono or "sin teléfono"}')
         if por_completar:
             self.stdout.write(f'{len(por_completar)} técnico(s) existente(s) sin teléfono:')
             for usuario, telefono in por_completar.values():
@@ -126,14 +136,14 @@ class Command(BaseCommand):
 
         credenciales = []
         with transaction.atomic():
-            for expediente, primero, apellidos, telefono in propuestas:
+            for expediente, primero, apellidos, rol, telefono in propuestas:
                 password = opciones['password'] or password_aleatoria()
                 UsuarioGIO.objects.create_user(
                     expediente=expediente,
                     password=password,
                     first_name=primero[:150],
                     last_name=apellidos[:150],
-                    rol=UsuarioGIO.Rol.TECNICO,
+                    rol=rol,
                     area_operativa=(opciones['area'] or '').upper(),
                     telefono=telefono,
                 )

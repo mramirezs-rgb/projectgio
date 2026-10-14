@@ -79,6 +79,7 @@ class Command(BaseCommand):
             return
 
         self._cache_tecnicos = None
+        self._cache_evaluadores = None
         totales = {'archivos': 0, 'nuevos': 0, 'actualizados': 0, 'omitidos': 0, 'errores': 0}
 
         for ruta in rutas:
@@ -157,6 +158,30 @@ class Command(BaseCommand):
                 return usuario, ''
         return None, clave
 
+    def _evaluadores(self):
+        if self._cache_evaluadores is None:
+            self._cache_evaluadores = {}
+            consulta = UsuarioGIO.objects.filter(
+                rol=UsuarioGIO.Rol.PI_EVALUADOR, is_active=True
+            ).annotate(
+                completo=Concat('first_name', Value(' '), 'last_name'),
+            )
+            for usuario in consulta:
+                for clave in {usuario.expediente.upper(),
+                              usuario.username.upper(),
+                              ' '.join(usuario.completo.split()).upper()}:
+                    if clave:
+                        self._cache_evaluadores.setdefault(clave, usuario)
+        return self._cache_evaluadores
+
+    def _resolver_evaluador(self, nombre):
+        """La columna OQU trae al técnico de planta interna responsable del folio."""
+        clave = ' '.join(nombre.split()).upper() if nombre else ''
+        if not clave:
+            return None, ''
+        usuario = self._evaluadores().get(clave)
+        return (usuario, '') if usuario else (None, clave)
+
     def _vincular_telefono(self, tecnico, telefono):
         """Guarda en el usuario el teléfono que trae el reporte si aún no tiene uno."""
         if not telefono or tecnico.telefono:
@@ -170,6 +195,7 @@ class Command(BaseCommand):
         marco = leer_tabla(ruta)
         nuevos = actualizados = omitidos = 0
         sin_enlazar = set()
+        oqu_sin_enlazar = set()
         telefonos_vinculados = set()
 
         with transaction.atomic():
@@ -192,6 +218,9 @@ class Command(BaseCommand):
                         telefonos_vinculados.add(tecnico.expediente)
                     if not datos.get('telefono_tecnico') and tecnico.telefono:
                         datos['telefono_tecnico'] = tecnico.telefono
+                evaluador, oqu_no_enlazado = self._resolver_evaluador(datos.get('oqu'))
+                if oqu_no_enlazado:
+                    oqu_sin_enlazar.add(oqu_no_enlazado)
 
                 existente = Incidente.objects.filter(folio=folio).first()
 
@@ -207,6 +236,10 @@ class Command(BaseCommand):
                         if getattr(existente, campo) != valor:
                             setattr(existente, campo, valor)
                             cambios.append(campo)
+                    # Solo se completa el técnico de planta interna si el folio no tiene uno.
+                    if evaluador and existente.evaluador_id is None:
+                        existente.evaluador = evaluador
+                        cambios.append('evaluador')
                     if not cambios:
                         omitidos += 1
                         continue
@@ -235,6 +268,7 @@ class Command(BaseCommand):
                     estatus=estatus,
                     fecha_apertura=apertura,
                     tecnico=tecnico,
+                    evaluador=evaluador,
                     origen_sisa=ruta.name,
                     **{campo: datos.get(campo) or '' for campo in CAMPOS_SISA
                        if campo != 'fecha_ingreso'},
@@ -254,6 +288,12 @@ class Command(BaseCommand):
             muestra = ', '.join(sorted(sin_enlazar)[:8])
             self.stdout.write(self.style.WARNING(
                 f'  {len(sin_enlazar)} técnico(s) del archivo sin usuario GIO: {muestra}'
+            ))
+        if oqu_sin_enlazar:
+            muestra = ', '.join(sorted(oqu_sin_enlazar)[:8])
+            self.stdout.write(self.style.WARNING(
+                f'  {len(oqu_sin_enlazar)} técnico(s) de planta interna (OQU) sin usuario GIO: '
+                f'{muestra}'
             ))
         if telefonos_vinculados:
             self.stdout.write(
