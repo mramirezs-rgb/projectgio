@@ -8,7 +8,9 @@ from .views import (
     EvaluadorListView,
     EvidenciaViewSet,
     IncidenteViewSet,
+    RepartoTurnosView,
     TecnicoListView,
+    TurnosView,
 )
 
 router = DefaultRouter()
@@ -21,5 +23,7 @@ urlpatterns = [
     path('centrales/', CentralListView.as_view(), name='centrales-list'),
     path('areas/', AreaListView.as_view(), name='areas-list'),
     path('catalogos/', CatalogosView.as_view(), name='catalogos'),
+    path('turnos/', TurnosView.as_view(), name='turnos'),
+    path('turnos/repartir/', RepartoTurnosView.as_view(), name='turnos-repartir'),
     path('', include(router.urls)),
 ]

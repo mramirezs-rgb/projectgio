@@ -26,7 +26,7 @@ export const TRANSICIONES = {
   [ESTATUS.PENDIENTE]: [ESTATUS.ASIGNADO, ESTATUS.EN_PROCESO],
   [ESTATUS.ASIGNADO]: [ESTATUS.EN_PROCESO, ESTATUS.PENDIENTE],
   [ESTATUS.EN_PROCESO]: [ESTATUS.ASIGNADO, ESTATUS.LIQUIDADO],
-  [ESTATUS.LIQUIDADO]: [ESTATUS.EN_PROCESO],
+  [ESTATUS.LIQUIDADO]: [ESTATUS.EN_PROCESO, ESTATUS.PENDIENTE],
 }
 
 export const etiquetaEstatus = (valor) =>
@@ -43,11 +43,17 @@ export function useIncidentes() {
   const cargando = ref(false)
   const error = ref(null)
   const incidentes = ref([])
+  // Catálogos completos: los usa el formulario del folio, que debe poder mostrar cualquier responsable.
   const tecnicos = ref([])
   const evaluadores = ref([])
   const centrales = ref([])
   const areas = ref([])
   const metricas = ref(null)
+
+  // Catálogos de los filtros del tablero: se acotan a la zona elegida.
+  const tecnicosZona = ref([])
+  const evaluadoresZona = ref([])
+  const centralesZona = ref([])
 
   const filtros = reactive({
     search: '',
@@ -86,6 +92,45 @@ export function useIncidentes() {
     evaluadores.value = resEvaluadores.status === 'fulfilled' ? listaDe(resEvaluadores.value) : []
     centrales.value = resCentrales.status === 'fulfilled' ? listaDe(resCentrales.value) : []
     areas.value = resAreas.status === 'fulfilled' ? listaDe(resAreas.value) : []
+    await actualizarZona()
+  }
+
+  const areaDeCentral = (nombre) =>
+    centrales.value.find((central) => central.nombre === nombre)?.area || ''
+
+  // La zona sale del área elegida o, si solo hay COPE/central, del área a la que pertenece.
+  // Las centrales se acotan solo por el área explícita: así puede cambiarse de central.
+  const actualizarZona = async () => {
+    const areaPersonal = filtros.area_operativa || areaDeCentral(filtros.central)
+    const [resTecnicos, resEvaluadores, resCentrales] = await Promise.allSettled([
+      areaPersonal ? getTecnicos({ area: areaPersonal }) : Promise.resolve(null),
+      areaPersonal ? getEvaluadores({ area: areaPersonal }) : Promise.resolve(null),
+      filtros.area_operativa
+        ? getCentrales({ area: filtros.area_operativa })
+        : Promise.resolve(null),
+    ])
+    tecnicosZona.value = resTecnicos.value ? listaDe(resTecnicos.value) : tecnicos.value
+    evaluadoresZona.value = resEvaluadores.value
+      ? listaDe(resEvaluadores.value)
+      : evaluadores.value
+    centralesZona.value = resCentrales.value ? listaDe(resCentrales.value) : centrales.value
+
+    // Si la selección ya no pertenece a la zona, se limpia para no filtrar por algo invisible.
+    if (filtros.central && !centralesZona.value.some((c) => c.nombre === filtros.central)) {
+      filtros.central = ''
+    }
+    if (
+      filtros.tecnico &&
+      !tecnicosZona.value.some((t) => String(t.id) === String(filtros.tecnico))
+    ) {
+      filtros.tecnico = ''
+    }
+    if (
+      filtros.evaluador &&
+      !evaluadoresZona.value.some((e) => String(e.id) === String(filtros.evaluador))
+    ) {
+      filtros.evaluador = ''
+    }
   }
 
   const cargarMetricas = async () => {
@@ -151,6 +196,7 @@ export function useIncidentes() {
       dilacion_min: '',
       ordering: '-fecha_apertura',
     })
+    await actualizarZona()
     await aplicarFiltros()
   }
 
@@ -192,6 +238,9 @@ export function useIncidentes() {
     evaluadores,
     centrales,
     areas,
+    tecnicosZona,
+    evaluadoresZona,
+    centralesZona,
     metricas,
     filtros,
     paginacion,
@@ -199,6 +248,7 @@ export function useIncidentes() {
     columnasKanban,
     kpis,
     cargarCatalogos,
+    actualizarZona,
     cargarIncidentes,
     cargarMetricas,
     aplicarFiltros,

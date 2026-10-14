@@ -7,8 +7,8 @@ from .managers import UsuarioGIOManager
 
 class UsuarioGIO(AbstractUser):
     class Rol(models.TextChoices):
-        TECNICO = 'TECNICO', 'Planta Externa (Técnico)'
-        PI_EVALUADOR = 'PI_EVALUADOR', 'Planta Interna (Evaluador)'
+        TECNICO = 'TECNICO', 'Técnico de planta externa'
+        PI_EVALUADOR = 'PI_EVALUADOR', 'Técnico'
         PI_SUB = 'PI_SUB', 'Planta Interna (Subgerencia)'
         ADMIN = 'ADMIN', 'Gerencia / Administración'
 

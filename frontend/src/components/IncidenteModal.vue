@@ -17,7 +17,7 @@ const props = defineProps({
   guardando: { type: Boolean, default: false },
 })
 
-const emit = defineEmits(['close', 'save', 'liquidar'])
+const emit = defineEmits(['close', 'save', 'liquidar', 'cancelar-liquidacion'])
 
 const AREAS_BASE = [
   'PUEBLA',
@@ -58,14 +58,22 @@ const esTecnico = computed(() => props.rol === 'TECNICO')
 const esEvaluador = computed(() => props.rol === 'PI_EVALUADOR')
 const visionGlobal = computed(() => !!props.permisos.vision_global)
 
-const puedeEditarIdentificacion = computed(() => visionGlobal.value)
-const puedeEditarAsignacion = computed(() => !!props.permisos.asignar)
-const puedeEditarRed = computed(() => visionGlobal.value || esEvaluador.value)
+// Un folio liquidado queda bloqueado para casi todos; el backend indica si aplica para quien consulta.
+const bloqueado = computed(() => !!props.modelo?.bloqueado)
+const puedeCancelarLiquidacion = computed(
+  () => props.editando && !!props.modelo?.puede_cancelar_liquidacion,
+)
+
+const puedeEditarIdentificacion = computed(() => visionGlobal.value && !bloqueado.value)
+const puedeEditarAsignacion = computed(() => !!props.permisos.asignar && !bloqueado.value)
+const puedeEditarRed = computed(
+  () => (visionGlobal.value || esEvaluador.value) && !bloqueado.value,
+)
 const puedeEditarLiquidacion = computed(
-  () => visionGlobal.value || esEvaluador.value || esTecnico.value,
+  () => (visionGlobal.value || esEvaluador.value || esTecnico.value) && !bloqueado.value,
 )
 const puedeCargarEvidencia = computed(
-  () => props.editando && (visionGlobal.value || esTecnico.value),
+  () => props.editando && (visionGlobal.value || esTecnico.value) && !bloqueado.value,
 )
 
 const estatusOriginal = computed(() => props.modelo?.estatus || ESTATUS.PENDIENTE)
@@ -210,6 +218,10 @@ const liquidar = () => {
   })
 }
 
+const cancelarLiquidacion = () => {
+  emit('cancelar-liquidacion', { id: props.modelo.id, folio: props.modelo.folio })
+}
+
 const alPulsarTecla = (evento) => {
   if (evento.key === 'Escape') emit('close')
 }
@@ -247,6 +259,10 @@ onUnmounted(() => document.removeEventListener('keydown', alPulsarTecla))
           &times;
         </button>
       </header>
+
+      <p v-if="bloqueado" class="caja__aviso" role="status">
+        Folio liquidado: no admite cambios. Solo Gerencia puede modificarlo.
+      </p>
 
       <nav class="pestanas" aria-label="Secciones del folio">
         <button
@@ -361,7 +377,7 @@ onUnmounted(() => document.removeEventListener('keydown', alPulsarTecla))
           </div>
 
           <div class="campo">
-            <label class="gio-etiqueta" for="tecnico">Técnico asignado (PE)</label>
+            <label class="gio-etiqueta" for="tecnico">Técnico de planta externa</label>
             <select id="tecnico" v-model="form.tecnico" :disabled="!puedeEditarAsignacion">
               <option :value="null">Sin asignar</option>
               <option v-for="t in tecnicos" :key="t.id" :value="t.id">
@@ -372,7 +388,7 @@ onUnmounted(() => document.removeEventListener('keydown', alPulsarTecla))
           </div>
 
           <div class="campo">
-            <label class="gio-etiqueta" for="evaluador">Evaluador asignado (PI)</label>
+            <label class="gio-etiqueta" for="evaluador">Técnico (planta interna)</label>
             <select id="evaluador" v-model="form.evaluador" :disabled="!puedeEditarAsignacion">
               <option :value="null">Sin asignar</option>
               <option v-for="e in evaluadores" :key="e.id" :value="e.id">
@@ -383,7 +399,7 @@ onUnmounted(() => document.removeEventListener('keydown', alPulsarTecla))
 
           <div class="campo">
             <label class="gio-etiqueta" for="estatus">Estatus del folio</label>
-            <select id="estatus" v-model="form.estatus" :disabled="!editando">
+            <select id="estatus" v-model="form.estatus" :disabled="!editando || bloqueado">
               <option v-for="valor in estatusDisponibles" :key="valor" :value="valor">
                 {{ etiquetaEstatus(valor) }}
               </option>
@@ -577,8 +593,8 @@ onUnmounted(() => document.removeEventListener('keydown', alPulsarTecla))
                 <span v-if="registro.campo">{{ registro.campo }}: </span>
                 <span v-if="registro.valor_anterior">{{ registro.valor_anterior }} → </span>
                 <span v-if="registro.valor_nuevo">{{ registro.valor_nuevo }}</span>
-                <span v-if="registro.detalle"> {{ registro.detalle }}</span>
               </p>
+              <p v-if="registro.detalle" class="historia__nota">{{ registro.detalle }}</p>
               <small class="historia__autor">{{ registro.usuario_nombre }}</small>
             </li>
           </ol>
@@ -599,7 +615,16 @@ onUnmounted(() => document.removeEventListener('keydown', alPulsarTecla))
           >
             Liquidar folio
           </button>
-          <button type="submit" class="gio-boton gio-boton--primario" :disabled="guardando">
+          <button
+            v-if="puedeCancelarLiquidacion"
+            type="button"
+            class="gio-boton gio-boton--peligro"
+            :disabled="guardando"
+            @click="cancelarLiquidacion"
+          >
+            Cancelar liquidación
+          </button>
+          <button v-if="!bloqueado" type="submit" class="gio-boton gio-boton--primario" :disabled="guardando">
             {{ guardando ? 'Guardando…' : editando ? 'Guardar cambios' : 'Crear folio' }}
           </button>
         </footer>
@@ -675,6 +700,14 @@ onUnmounted(() => document.removeEventListener('keydown', alPulsarTecla))
 
 .caja__dato {
   color: var(--apagado);
+}
+.caja__aviso {
+  margin: 0;
+  padding: 0.6rem 1.2rem;
+  font-size: 0.8125rem;
+  color: var(--alerta);
+  background-color: rgb(245 158 11 / 0.1);
+  border-bottom: 1px solid var(--borde);
 }
 
 .caja__cerrar {
@@ -792,8 +825,9 @@ onUnmounted(() => document.removeEventListener('keydown', alPulsarTecla))
 
 .historia__alto {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
-  gap: 0.75rem;
+  gap: 0.25rem 0.75rem;
   font-size: 0.78rem;
 }
 
@@ -805,7 +839,13 @@ onUnmounted(() => document.removeEventListener('keydown', alPulsarTecla))
   margin: 0.3rem 0;
   font-size: 0.78rem;
   color: var(--apagado);
-  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+.historia__nota {
+  margin: 0.2rem 0 0;
+  font-size: 0.72rem;
+  color: var(--tenue);
+  overflow-wrap: anywhere;
 }
 
 .historia__autor {

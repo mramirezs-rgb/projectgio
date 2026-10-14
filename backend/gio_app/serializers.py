@@ -2,7 +2,7 @@ from django.conf import settings
 from django.contrib.auth import get_user_model
 from rest_framework import serializers
 
-from .models import BitacoraIncidente, EvidenciaIncidente, Incidente
+from .models import BitacoraIncidente, EvidenciaIncidente, Incidente, TurnoEvaluador
 
 UsuarioGIO = get_user_model()
 
@@ -56,7 +56,21 @@ class BitacoraIncidenteSerializer(serializers.ModelSerializer):
         return obj.usuario.nombre_completo if obj.usuario else 'Sistema'
 
 
-class IncidenteSerializer(serializers.ModelSerializer):
+class PermisosFolioMixin:
+    """Estado de liquidación calculado para el usuario que consulta el folio."""
+
+    def _usuario(self):
+        peticion = self.context.get('request')
+        return peticion.user if peticion else None
+
+    def get_bloqueado(self, obj):
+        return obj.bloqueado_para(self._usuario())
+
+    def get_puede_cancelar_liquidacion(self, obj):
+        return obj.puede_cancelar_liquidacion(self._usuario())
+
+
+class IncidenteSerializer(PermisosFolioMixin, serializers.ModelSerializer):
     tecnico_nombre = serializers.SerializerMethodField()
     evaluador_nombre = serializers.SerializerMethodField()
     estatus_display = serializers.CharField(source='get_estatus_display', read_only=True)
@@ -66,6 +80,8 @@ class IncidenteSerializer(serializers.ModelSerializer):
     transiciones_validas = serializers.ListField(child=serializers.CharField(), read_only=True)
     evidencias = EvidenciaIncidenteSerializer(many=True, read_only=True)
     total_evidencias = serializers.IntegerField(source='evidencias.count', read_only=True)
+    bloqueado = serializers.SerializerMethodField()
+    puede_cancelar_liquidacion = serializers.SerializerMethodField()
 
     class Meta:
         model = Incidente
@@ -73,7 +89,7 @@ class IncidenteSerializer(serializers.ModelSerializer):
             'id', 'folio', 'incidente', 'referencia', 'empresa', 'tipo_servicio',
             'estatus', 'estatus_display', 'transiciones_validas', 'codigo_fallo', 'estado_enlace',
             'fecha_apertura', 'fecha_cierre', 'fecha_ingreso', 'dilacion_dias', 'semaforo',
-            'mttr_horas', 'horas_abierto',
+            'mttr_horas', 'horas_abierto', 'bloqueado', 'puede_cancelar_liquidacion',
             'area_operativa', 'central', 'cope', 'ctro_trabajo', 'oqu',
             'tecnico', 'tecnico_nombre', 'evaluador', 'evaluador_nombre', 'telefono_tecnico',
             'descripcion', 'diagnostico_final', 'obs_usuario', 'observaciones_sisa',
@@ -101,12 +117,14 @@ class IncidenteSerializer(serializers.ModelSerializer):
 
     def validate_tecnico(self, usuario):
         if usuario and not usuario.es_tecnico:
-            raise serializers.ValidationError('El usuario seleccionado no tiene rol TECNICO.')
+            raise serializers.ValidationError(
+                'El usuario seleccionado no es técnico de planta externa.')
         return usuario
 
     def validate_evaluador(self, usuario):
         if usuario and not (usuario.es_evaluador or usuario.tiene_vision_global):
-            raise serializers.ValidationError('El usuario seleccionado no es evaluador de Planta Interna.')
+            raise serializers.ValidationError(
+                'El usuario seleccionado no es técnico de planta interna.')
         return usuario
 
     def validate(self, datos):
@@ -135,7 +153,7 @@ class IncidenteSerializer(serializers.ModelSerializer):
         return datos
 
 
-class IncidenteListaSerializer(serializers.ModelSerializer):
+class IncidenteListaSerializer(PermisosFolioMixin, serializers.ModelSerializer):
     tecnico_nombre = serializers.SerializerMethodField()
     evaluador_nombre = serializers.SerializerMethodField()
     estatus_display = serializers.CharField(source='get_estatus_display', read_only=True)
@@ -143,15 +161,18 @@ class IncidenteListaSerializer(serializers.ModelSerializer):
     horas_abierto = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
     semaforo = serializers.CharField(read_only=True)
     total_evidencias = serializers.IntegerField(source='evidencias.count', read_only=True)
+    bloqueado = serializers.SerializerMethodField()
+    puede_cancelar_liquidacion = serializers.SerializerMethodField()
 
     class Meta:
         model = Incidente
         fields = [
             'id', 'folio', 'referencia', 'empresa', 'tipo_servicio', 'estatus', 'estatus_display',
             'codigo_fallo', 'estado_enlace', 'fecha_apertura', 'fecha_cierre', 'dilacion_dias',
-            'semaforo', 'mttr_horas', 'horas_abierto', 'area_operativa', 'central',
-            'tecnico', 'tecnico_nombre', 'evaluador', 'evaluador_nombre',
-            'dir_pta_a', 'ips', 'total_evidencias', 'exportado_sisa',
+            'semaforo', 'mttr_horas', 'horas_abierto', 'bloqueado', 'puede_cancelar_liquidacion',
+            'area_operativa', 'central', 'tecnico', 'tecnico_nombre', 'evaluador',
+            'evaluador_nombre', 'dir_pta_a', 'ips', 'telefono_tecnico', 'descripcion', 'desc_f1',
+            'diagnostico_final', 'cve_liq', 'desc_liq', 'total_evidencias', 'exportado_sisa',
         ]
 
     def get_tecnico_nombre(self, obj):
@@ -176,6 +197,7 @@ def _solo_lectura_excepto(editables):
     declarados = {
         'tecnico_nombre', 'evaluador_nombre', 'estatus_display', 'mttr_horas', 'horas_abierto',
         'semaforo', 'transiciones_validas', 'evidencias', 'total_evidencias',
+        'bloqueado', 'puede_cancelar_liquidacion',
     }
     return [
         campo for campo in IncidenteSerializer.Meta.fields
@@ -213,3 +235,39 @@ class AsignacionMasivaSerializer(serializers.Serializer):
 class CatalogoSerializer(serializers.Serializer):
     id = serializers.CharField()
     nombre = serializers.CharField()
+
+
+class TurnoEvaluadorSerializer(serializers.ModelSerializer):
+    evaluador_nombre = serializers.CharField(source='evaluador.nombre_completo', read_only=True)
+    evaluador_expediente = serializers.CharField(source='evaluador.expediente', read_only=True)
+    area_operativa = serializers.CharField(source='evaluador.area_operativa', read_only=True)
+    turno_display = serializers.CharField(source='get_turno_display', read_only=True)
+
+    class Meta:
+        model = TurnoEvaluador
+        fields = ['id', 'fecha', 'turno', 'turno_display', 'evaluador', 'evaluador_nombre',
+                  'evaluador_expediente', 'area_operativa']
+
+
+class AsignacionTurnoSerializer(serializers.Serializer):
+    evaluador = serializers.PrimaryKeyRelatedField(
+        queryset=UsuarioGIO.objects.filter(rol=UsuarioGIO.Rol.PI_EVALUADOR, is_active=True),
+    )
+    turno = serializers.ChoiceField(choices=TurnoEvaluador.Turno.choices)
+
+
+class GuardarTurnosSerializer(serializers.Serializer):
+    fecha = serializers.DateField()
+    asignaciones = AsignacionTurnoSerializer(many=True, allow_empty=True)
+
+    def validate_asignaciones(self, valor):
+        evaluadores = [item['evaluador'].pk for item in valor]
+        repetidos = {pk for pk in evaluadores if evaluadores.count(pk) > 1}
+        if repetidos:
+            raise serializers.ValidationError('Un técnico no puede tener dos turnos el mismo día.')
+        return valor
+
+
+class RepartoTurnosSerializer(serializers.Serializer):
+    fecha = serializers.DateField()
+    limite = serializers.IntegerField(min_value=0, required=False, default=0)

@@ -27,6 +27,12 @@ const rutas = [
     meta: { roles: [ROLES.PI_SUB, ROLES.ADMIN] },
   },
   {
+    path: '/turnos',
+    name: 'turnos',
+    component: () => import('../views/Turnos.vue'),
+    meta: { roles: [ROLES.PI_SUB, ROLES.ADMIN] },
+  },
+  {
     path: '/usuarios',
     name: 'usuarios',
     component: () => import('../views/Usuarios.vue'),

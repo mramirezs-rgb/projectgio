@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import IncidenteModal from '../components/IncidenteModal.vue'
 import KanbanBoard from '../components/KanbanBoard.vue'
 import TablaIncidentes from '../components/TablaIncidentes.vue'
@@ -7,7 +7,9 @@ import { useAuth } from '../composables/useAuth.js'
 import { COLUMNAS_KANBAN, ESTATUS, etiquetaEstatus, useIncidentes } from '../composables/useIncidentes.js'
 import {
   asignarMasivo,
+  cancelarLiquidacion,
   createIncidente,
+  getIncidente,
   liquidarIncidente,
   mensajeDeError,
   updateIncidente,
@@ -21,7 +23,11 @@ import {
 } from '../utils/alerts.js'
 import { descargarCSV, formatearFecha, formatearHoras, marcaDeTiempo } from '../utils/formato.js'
 
-const { usuario, rol, permisos } = useAuth()
+// Filas por página: la tabla muestra 20 folios; el kanban conserva su carga completa.
+const FILAS_TABLA = 20
+const FILAS_KANBAN = 50
+
+const { usuario, rol, permisos, esGerencia } = useAuth()
 const {
   cargando,
   incidentes,
@@ -29,12 +35,16 @@ const {
   evaluadores,
   centrales,
   areas,
+  tecnicosZona,
+  evaluadoresZona,
+  centralesZona,
   filtros,
   paginacion,
   totalPaginas,
   columnasKanban,
   kpis,
   cargarCatalogos,
+  actualizarZona,
   cargarIncidentes,
   aplicarFiltros,
   aplicarFiltrosConRetardo,
@@ -107,10 +117,57 @@ const abrirNuevo = () => {
   modalAbierto.value = true
 }
 
-const abrirEditar = (incidente) => {
+const abrirEditar = async (incidente) => {
   formActual.value = { ...FORM_VACIO, ...incidente }
   editando.value = true
   modalAbierto.value = true
+  try {
+    // La lista trae un resumen; el detalle completa datos de red, liquidación y permisos del folio.
+    const { data } = await getIncidente(incidente.id)
+    formActual.value = { ...FORM_VACIO, ...data }
+  } catch (error) {
+    modalAbierto.value = false
+    mostrarError('No se pudo abrir el folio', mensajeDeError(error))
+  }
+}
+
+watch(vista, async (nueva) => {
+  paginacion.tamano = nueva === 'tabla' ? FILAS_TABLA : FILAS_KANBAN
+  paginacion.pagina = 1
+  await cargarIncidentes({ conMetricas: false })
+})
+
+// Cambiar área o central redefine qué técnicos y centrales son válidos en los filtros.
+const alCambiarZona = async () => {
+  await actualizarZona()
+  await aplicarFiltros()
+}
+
+const cancelarLiquidacionFolio = async (datos) => {
+  const confirmado = await confirmarAccion(
+    `Cancelar liquidación de ${datos.folio}`,
+    'El folio volverá a estatus Pendiente. La cancelación queda registrada en la bitácora.',
+    'Cancelar liquidación',
+  )
+  if (!confirmado) return
+  guardando.value = true
+  try {
+    const { data } = await cancelarLiquidacion(datos.id)
+    reemplazarIncidente(data)
+    modalAbierto.value = false
+    mostrarExito('Liquidación cancelada', `${datos.folio} regresó a pendiente.`)
+  } catch (error) {
+    mostrarError('No se pudo cancelar la liquidación', mensajeDeError(error))
+  } finally {
+    guardando.value = false
+  }
+}
+
+const abrirSisa = () => {
+  mostrarAdvertencia(
+    'Exportaciones SISA',
+    'El control de exportaciones a SISA de la nueva base de datos está en definición.',
+  )
 }
 
 const guardar = async (datos) => {
@@ -154,6 +211,10 @@ const moverEnTablero = async ({ incidente, estatus }) => {
       'Liquidación con evidencia',
       'Para liquidar un folio se requiere diagnóstico final y al menos una evidencia fotográfica.',
     )
+    return
+  }
+  if (incidente.estatus === ESTATUS.LIQUIDADO && estatus === ESTATUS.PENDIENTE) {
+    await cancelarLiquidacionFolio(incidente)
     return
   }
   const anterior = incidente.estatus
@@ -205,8 +266,8 @@ const exportar = () => {
       'Tipo de servicio',
       'Area operativa',
       'Central',
-      'Tecnico',
-      'Evaluador',
+      'Técnico de planta externa',
+      'Técnico (planta interna)',
       'Estatus',
       'Estado del enlace',
       'Dilacion (dias)',
@@ -313,7 +374,7 @@ const ordenar = async (campo) => {
         </div>
         <div class="filtros__campo">
           <label class="gio-etiqueta" for="f-area">Área</label>
-          <select id="f-area" v-model="filtros.area_operativa" @change="aplicarFiltros">
+          <select id="f-area" v-model="filtros.area_operativa" @change="alCambiarZona">
             <option value="">Todas</option>
             <option v-for="area in areas" :key="area.id" :value="area.nombre">
               {{ area.nombre }}
@@ -322,25 +383,25 @@ const ordenar = async (campo) => {
         </div>
         <div class="filtros__campo">
           <label class="gio-etiqueta" for="f-central">COPE / Central</label>
-          <select id="f-central" v-model="filtros.central" @change="aplicarFiltros">
+          <select id="f-central" v-model="filtros.central" @change="alCambiarZona">
             <option value="">Todas</option>
-            <option v-for="central in centrales" :key="central.id" :value="central.nombre">
+            <option v-for="central in centralesZona" :key="central.id" :value="central.nombre">
               {{ central.nombre }}
             </option>
           </select>
         </div>
         <div class="filtros__campo">
-          <label class="gio-etiqueta" for="f-tecnico">Técnico</label>
+          <label class="gio-etiqueta" for="f-tecnico">Técnico de planta externa</label>
           <select id="f-tecnico" v-model="filtros.tecnico" @change="aplicarFiltros">
             <option value="">Todos</option>
-            <option v-for="t in tecnicos" :key="t.id" :value="t.id">{{ t.nombre }}</option>
+            <option v-for="t in tecnicosZona" :key="t.id" :value="t.id">{{ t.nombre }}</option>
           </select>
         </div>
         <div v-if="permisos.vision_global" class="filtros__campo">
-          <label class="gio-etiqueta" for="f-evaluador">Evaluador</label>
+          <label class="gio-etiqueta" for="f-evaluador">Técnico (planta interna)</label>
           <select id="f-evaluador" v-model="filtros.evaluador" @change="aplicarFiltros">
             <option value="">Todos</option>
-            <option v-for="e in evaluadores" :key="e.id" :value="e.id">{{ e.nombre }}</option>
+            <option v-for="e in evaluadoresZona" :key="e.id" :value="e.id">{{ e.nombre }}</option>
           </select>
         </div>
         <div class="filtros__campo">
@@ -384,6 +445,14 @@ const ordenar = async (campo) => {
           @click="exportar"
         >
           Exportar CSV
+        </button>
+        <button
+          v-if="esGerencia"
+          type="button"
+          class="gio-boton gio-boton--secundario"
+          @click="abrirSisa"
+        >
+          Exportaciones SISA
         </button>
         <div class="conmutador" role="group" aria-label="Tipo de vista">
           <button
@@ -485,6 +554,7 @@ const ordenar = async (campo) => {
       @close="modalAbierto = false"
       @save="guardar"
       @liquidar="liquidar"
+      @cancelar-liquidacion="cancelarLiquidacionFolio"
     />
   </div>
 </template>
