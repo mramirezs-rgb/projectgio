@@ -1,9 +1,11 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
+import DesempenoCampo from '../components/DesempenoCampo.vue'
 import EvidenciaUploader from '../components/EvidenciaUploader.vue'
 import { useAuth } from '../composables/useAuth.js'
 import { ESTATUS, etiquetaEstatus } from '../composables/useIncidentes.js'
 import {
+  cancelarLiquidacion,
   getEvidencias,
   getIncidentes,
   liquidarIncidente,
@@ -14,6 +16,9 @@ import { confirmarAccion, mostrarError, mostrarExito, notificar } from '../utils
 import { formatearFecha, formatearHoras } from '../utils/formato.js'
 
 const { usuario, permisos } = useAuth()
+
+// Gerencia y Subgerencia no atienden folios en campo: aquí ven el desempeño de sus técnicos.
+const supervision = computed(() => !!permisos.value.vision_global)
 
 const cargando = ref(false)
 const problema = ref('')
@@ -45,13 +50,7 @@ const cargar = async () => {
   cargando.value = true
   problema.value = ''
   try {
-    const { data } = await getIncidentes({
-      page_size: 200,
-      ordering: '-dilacion_dias',
-      ...(permisos.value.vision_global && usuario.value?.rol !== 'TECNICO'
-        ? { sin_tecnico: false }
-        : {}),
-    })
+    const { data } = await getIncidentes({ page_size: 200, ordering: '-dilacion_dias' })
     folios.value = Array.isArray(data) ? data : data.results || []
   } catch (error) {
     problema.value = mensajeDeError(error, 'No se pudieron cargar los folios asignados.')
@@ -60,7 +59,9 @@ const cargar = async () => {
   }
 }
 
-onMounted(cargar)
+onMounted(() => {
+  if (!supervision.value) cargar()
+})
 
 const alternar = async (folio) => {
   if (expandido.value === folio.id) {
@@ -143,13 +144,36 @@ const liquidar = async (folio) => {
   }
 }
 
+const deshacerLiquidacion = async (folio) => {
+  const confirmado = await confirmarAccion(
+    `Cancelar liquidación de ${folio.folio}`,
+    'El folio volverá a Pendiente para corregirlo. Queda registrado en bitácora.',
+    'Cancelar liquidación',
+  )
+  if (!confirmado) return
+
+  enviando.value = true
+  try {
+    const { data } = await cancelarLiquidacion(folio.id)
+    reemplazar(data)
+    expandido.value = null
+    notificar('Liquidación cancelada')
+  } catch (error) {
+    mostrarError('No se pudo cancelar la liquidación', mensajeDeError(error))
+  } finally {
+    enviando.value = false
+  }
+}
+
 const telefono = (valor) => (valor ? `tel:${String(valor).replace(/[^\d+]/g, '')}` : null)
 const mapa = (direccion) =>
   direccion ? `https://maps.google.com/?q=${encodeURIComponent(direccion)}` : null
 </script>
 
 <template>
-  <div class="campo">
+  <DesempenoCampo v-if="supervision" />
+
+  <div v-else class="campo">
     <header class="campo__cabecera">
       <div>
         <h1>Mis folios</h1>
@@ -339,6 +363,18 @@ const mapa = (direccion) =>
               solo-lectura
               @cambio="cargarEvidencias(folio.id)"
             />
+            <button
+              v-if="folio.puede_cancelar_liquidacion"
+              type="button"
+              class="gio-boton gio-boton--peligro gio-boton--tactil"
+              :disabled="enviando"
+              @click="deshacerLiquidacion(folio)"
+            >
+              Cancelar liquidación (error de captura)
+            </button>
+            <p v-else-if="folio.bloqueado" class="detalle__pista">
+              Folio liquidado. Solo Gerencia puede modificarlo.
+            </p>
           </template>
         </section>
       </li>
@@ -547,6 +583,12 @@ const mapa = (direccion) =>
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 0.6rem;
+}
+
+.detalle__pista {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--tenue);
 }
 
 .detalle__cerrado {

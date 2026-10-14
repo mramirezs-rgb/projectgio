@@ -1,4 +1,5 @@
 import uuid
+from datetime import timedelta
 from decimal import Decimal, ROUND_HALF_UP
 
 from django.conf import settings
@@ -41,8 +42,11 @@ class Incidente(models.Model):
         Estatus.PENDIENTE: {Estatus.ASIGNADO, Estatus.EN_PROCESO},
         Estatus.ASIGNADO: {Estatus.PENDIENTE, Estatus.EN_PROCESO},
         Estatus.EN_PROCESO: {Estatus.ASIGNADO, Estatus.LIQUIDADO},
-        Estatus.LIQUIDADO: {Estatus.EN_PROCESO},
+        Estatus.LIQUIDADO: {Estatus.EN_PROCESO, Estatus.PENDIENTE},
     }
+
+    # Ventana en la que el técnico de planta externa puede cancelar su propia liquidación.
+    VENTANA_CANCELACION = timedelta(hours=1)
 
     folio = models.CharField(max_length=50, unique=True, db_index=True)
     incidente = models.CharField(max_length=50, blank=True, default='')
@@ -190,6 +194,30 @@ class Incidente(models.Model):
             return True
         return nuevo_estatus in self.TRANSICIONES.get(self.estatus, set())
 
+    def bloqueado_para(self, usuario):
+        """Un folio liquidado no se modifica, salvo por Gerencia."""
+        if self.estatus != self.Estatus.LIQUIDADO:
+            return False
+        return not (usuario and usuario.is_authenticated and usuario.es_admin)
+
+    def puede_cancelar_liquidacion(self, usuario, ahora=None):
+        """Gerencia siempre puede. El técnico de planta externa solo puede deshacer
+        su propia liquidación dentro de la ventana de cancelación (mismo día y máximo
+        una hora después del cierre)."""
+        if self.estatus != self.Estatus.LIQUIDADO or not self.fecha_cierre:
+            return False
+        if not (usuario and usuario.is_authenticated):
+            return False
+        if usuario.es_admin:
+            return True
+        if not usuario.es_tecnico or self.tecnico_id != usuario.id:
+            return False
+        ahora = ahora or timezone.now()
+        transcurrido = ahora - self.fecha_cierre
+        if transcurrido < timedelta(0) or transcurrido > self.VENTANA_CANCELACION:
+            return False
+        return timezone.localtime(self.fecha_cierre).date() == timezone.localtime(ahora).date()
+
 
 class EvidenciaIncidente(models.Model):
     incidente = models.ForeignKey(Incidente, on_delete=models.CASCADE, related_name='evidencias')
@@ -217,6 +245,32 @@ class EvidenciaIncidente(models.Model):
         return super().save(*args, **kwargs)
 
 
+class TurnoEvaluador(models.Model):
+    """Turno de un técnico de planta interna (evaluador) en una fecha determinada."""
+
+    class Turno(models.TextChoices):
+        MATUTINO = 'MATUTINO', 'Matutino'
+        VESPERTINO = 'VESPERTINO', 'Vespertino'
+        NOCTURNO = 'NOCTURNO', 'Nocturno'
+
+    fecha = models.DateField(db_index=True)
+    turno = models.CharField(max_length=12, choices=Turno.choices)
+    evaluador = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+                                  related_name='turnos')
+
+    class Meta:
+        db_table = 'incidentes_turnos'
+        ordering = ['fecha', 'turno', 'evaluador__expediente']
+        verbose_name = 'turno'
+        verbose_name_plural = 'turnos'
+        constraints = [
+            models.UniqueConstraint(fields=['fecha', 'evaluador'], name='turno_unico_por_dia'),
+        ]
+
+    def __str__(self):
+        return f'{self.fecha:%Y-%m-%d} · {self.get_turno_display()} · {self.evaluador_id}'
+
+
 class BitacoraIncidente(models.Model):
     class Accion(models.TextChoices):
         CREACION = 'CREACION', 'Creación'
@@ -224,6 +278,7 @@ class BitacoraIncidente(models.Model):
         CAMBIO_ESTATUS = 'CAMBIO_ESTATUS', 'Cambio de estatus'
         ASIGNACION = 'ASIGNACION', 'Asignación'
         LIQUIDACION = 'LIQUIDACION', 'Liquidación'
+        CANCELACION_LIQUIDACION = 'CANCELACION_LIQUIDACION', 'Cancelación de liquidación'
         EVIDENCIA = 'EVIDENCIA', 'Carga de evidencia'
         INGESTA = 'INGESTA', 'Ingesta SISA'
         EXPORTACION = 'EXPORTACION', 'Exportación SISA'
@@ -231,7 +286,7 @@ class BitacoraIncidente(models.Model):
     incidente = models.ForeignKey(Incidente, on_delete=models.CASCADE, related_name='bitacora')
     usuario = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
                                 null=True, blank=True, related_name='acciones_bitacora')
-    accion = models.CharField(max_length=20, choices=Accion.choices)
+    accion = models.CharField(max_length=30, choices=Accion.choices)
     campo = models.CharField(max_length=60, blank=True, default='')
     valor_anterior = models.TextField(blank=True, default='')
     valor_nuevo = models.TextField(blank=True, default='')

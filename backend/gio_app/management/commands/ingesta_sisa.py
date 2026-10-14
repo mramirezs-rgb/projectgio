@@ -34,6 +34,11 @@ ESTADOS_ENLACE = {
     'FALLA': Incidente.EstadoEnlace.DOWN,
 }
 
+NUMEROS_TECNICO = [
+    'NUMERO TECNICO', 'NUM TECNICO', 'NO TECNICO', 'NO. TECNICO', 'NUMERO DE TECNICO',
+    'EXPEDIENTE TECNICO', 'NUMERO EMPLEADO',
+]
+
 CAMPOS_SISA = (
     'incidente', 'referencia', 'empresa', 'tipo_servicio', 'area_operativa', 'central',
     'cope', 'ctro_trabajo', 'oqu', 'dir_pta_a', 'punta_a', 'ips', 'dslam', 'red_secundaria',
@@ -132,7 +137,13 @@ class Command(BaseCommand):
                         self._cache_tecnicos.setdefault(clave, usuario)
         return self._cache_tecnicos
 
-    def _resolver_tecnico(self, nombre):
+    def _resolver_tecnico(self, numero, nombre):
+        """Vincula al técnico por su número (expediente) y, si no viene, por su nombre."""
+        if numero:
+            numero = numero[:-2] if numero.endswith('.0') else numero
+            usuario = self._tecnicos().get(numero.strip().upper())
+            if usuario and usuario.rol == UsuarioGIO.Rol.TECNICO:
+                return usuario, ''
         if not nombre:
             return None, ''
         clave = ' '.join(nombre.split()).upper()
@@ -163,9 +174,12 @@ class Command(BaseCommand):
                 datos = self._mapear(fila)
                 tecnico_nombre = primer_valor(
                     fila, ['TECNICO ASIGNADO', 'TECNICO', 'RESPONSABLE', 'PROVEEDOR'])
-                tecnico, no_enlazado = self._resolver_tecnico(tecnico_nombre)
+                tecnico_numero = primer_valor(fila, NUMEROS_TECNICO)
+                tecnico, no_enlazado = self._resolver_tecnico(tecnico_numero, tecnico_nombre)
                 if no_enlazado:
                     sin_enlazar.add(no_enlazado)
+                if tecnico and not datos.get('telefono_tecnico') and tecnico.telefono:
+                    datos['telefono_tecnico'] = tecnico.telefono
 
                 existente = Incidente.objects.filter(folio=folio).first()
 

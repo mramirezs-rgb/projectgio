@@ -16,7 +16,7 @@ const columnaActiva = ref(null)
 const destinosValidos = (estatus) => TRANSICIONES[estatus] || []
 
 const iniciarArrastre = (evento, item) => {
-  if (!props.puedeMover) return
+  if (!props.puedeMover || item.bloqueado) return
   arrastrado.value = item
   evento.dataTransfer.effectAllowed = 'move'
   evento.dataTransfer.setData('text/plain', String(item.id))
@@ -28,7 +28,7 @@ const terminarArrastre = () => {
 }
 
 const puedeSoltarEn = (idColumna) => {
-  if (!props.puedeMover || !arrastrado.value) return false
+  if (!props.puedeMover || !arrastrado.value || arrastrado.value.bloqueado) return false
   if (arrastrado.value.estatus === idColumna) return false
   return destinosValidos(arrastrado.value.estatus).includes(idColumna)
 }
@@ -73,7 +73,7 @@ const soltar = (evento, idColumna) => {
           :key="item.id"
           class="ficha"
           :class="`ficha--${item.semaforo || 'normal'}`"
-          :draggable="puedeMover"
+          :draggable="puedeMover && !item.bloqueado"
           tabindex="0"
           role="button"
           :aria-label="`Folio ${item.folio}, ${etiquetaEstatus(item.estatus)}`"
@@ -98,7 +98,7 @@ const soltar = (evento, idColumna) => {
               <dd>{{ item.central || item.area_operativa || '—' }}</dd>
             </div>
             <div>
-              <dt>Técnico</dt>
+              <dt>Técnico de planta externa</dt>
               <dd>{{ item.tecnico_nombre || 'Sin asignar' }}</dd>
             </div>
           </dl>

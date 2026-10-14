@@ -1,3 +1,5 @@
+from datetime import date
+
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.db import transaction
@@ -14,16 +16,21 @@ from rest_framework import filters as drf_filters
 
 from usuarios.permissions import PuedeAsignar, PuedeCrearIncidente, PuedeEditarIncidente
 
+from .desempeno import desempeno_de_campo
 from .filters import IncidenteFilter
-from .models import BitacoraIncidente, EvidenciaIncidente, Incidente
+from .models import BitacoraIncidente, EvidenciaIncidente, Incidente, TurnoEvaluador
+from .reparto import repartir_folios_del_dia
 from .serializers import (
     AsignacionMasivaSerializer,
     BitacoraIncidenteSerializer,
     EvidenciaIncidenteSerializer,
+    GuardarTurnosSerializer,
     IncidenteEvaluadorSerializer,
     IncidenteListaSerializer,
     IncidenteSerializer,
     IncidenteTecnicoSerializer,
+    RepartoTurnosSerializer,
+    TurnoEvaluadorSerializer,
 )
 
 UsuarioGIO = get_user_model()
@@ -32,6 +39,8 @@ CAMPOS_AUDITADOS = (
     'estatus', 'tecnico', 'evaluador', 'diagnostico_final', 'codigo_fallo',
     'estado_enlace', 'cve_liq', 'desc_liq', 'central', 'area_operativa',
 )
+
+MENSAJE_BLOQUEADO = 'El folio está liquidado y no admite cambios. Solo Gerencia puede modificarlo.'
 
 
 def queryset_por_rol(usuario):
@@ -45,6 +54,17 @@ def queryset_por_rol(usuario):
     if usuario.es_tecnico:
         return base.filter(tecnico=usuario)
     return base.none()
+
+
+def area_de_consulta(request):
+    return (request.query_params.get('area') or '').strip().upper()
+
+
+def filtrar_por_zona(queryset, area):
+    """Usuarios de la zona indicada o sin zona asignada."""
+    if not area:
+        return queryset
+    return queryset.filter(Q(area_operativa=area) | Q(area_operativa=''))
 
 
 class IncidenteViewSet(viewsets.ModelViewSet):
@@ -69,6 +89,11 @@ class IncidenteViewSet(viewsets.ModelViewSet):
             if usuario.es_evaluador:
                 return IncidenteEvaluadorSerializer
         return IncidenteSerializer
+
+    def update(self, request, *args, **kwargs):
+        if self.get_object().bloqueado_para(request.user):
+            raise PermissionDenied(MENSAJE_BLOQUEADO)
+        return super().update(request, *args, **kwargs)
 
     def perform_create(self, serializer):
         incidente = serializer.save()
@@ -110,6 +135,8 @@ class IncidenteViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'], url_path='liquidar')
     def liquidar(self, request, pk=None):
         incidente = self.get_object()
+        if incidente.bloqueado_para(request.user):
+            raise PermissionDenied(MENSAJE_BLOQUEADO)
         diagnostico = (request.data.get('diagnostico_final') or '').strip()
         if not diagnostico:
             raise ValidationError({'diagnostico_final': 'El diagnóstico final es obligatorio.'})
@@ -140,6 +167,25 @@ class IncidenteViewSet(viewsets.ModelViewSet):
         )
         return Response(IncidenteSerializer(incidente, context={'request': request}).data)
 
+    @action(detail=True, methods=['post'], url_path='cancelar-liquidacion')
+    def cancelar_liquidacion(self, request, pk=None):
+        incidente = self.get_object()
+        if not incidente.puede_cancelar_liquidacion(request.user):
+            raise PermissionDenied(
+                'Solo Gerencia puede cancelar una liquidación. El técnico asignado puede hacerlo '
+                'únicamente el mismo día y dentro de la hora posterior al cierre.'
+            )
+        cierre = timezone.localtime(incidente.fecha_cierre).strftime('%Y-%m-%d %H:%M')
+        incidente.estatus = Incidente.Estatus.PENDIENTE
+        incidente.save()
+
+        BitacoraIncidente.registrar(
+            incidente, request.user, BitacoraIncidente.Accion.CANCELACION_LIQUIDACION,
+            campo='estatus', anterior=Incidente.Estatus.LIQUIDADO, nuevo=incidente.estatus,
+            detalle=f'Liquidación del {cierre} cancelada',
+        )
+        return Response(IncidenteSerializer(incidente, context={'request': request}).data)
+
     @action(detail=True, methods=['get', 'post'], url_path='evidencias',
             parser_classes=[MultiPartParser, FormParser], throttle_scope='evidencia')
     def evidencias(self, request, pk=None):
@@ -150,6 +196,8 @@ class IncidenteViewSet(viewsets.ModelViewSet):
             return Response(serializer.data)
 
         self.check_object_permissions(request, incidente)
+        if incidente.bloqueado_para(request.user):
+            raise PermissionDenied(MENSAJE_BLOQUEADO)
         if incidente.evidencias.count() >= settings.EVIDENCIA_MAX_POR_FOLIO:
             raise ValidationError({
                 'evidencias': f'El folio alcanzó el máximo de {settings.EVIDENCIA_MAX_POR_FOLIO} evidencias.'
@@ -180,8 +228,10 @@ class IncidenteViewSet(viewsets.ModelViewSet):
         datos = serializer.validated_data
         folios = [f.strip() for f in datos['folios'] if f.strip()]
 
-        incidentes = list(self.get_queryset().filter(folio__in=folios))
-        encontrados = {inc.folio for inc in incidentes}
+        encontrados_todos = list(self.get_queryset().filter(folio__in=folios))
+        encontrados = {inc.folio for inc in encontrados_todos}
+        incidentes = [inc for inc in encontrados_todos if not inc.bloqueado_para(request.user)]
+        bloqueados = sorted(inc.folio for inc in encontrados_todos if inc not in incidentes)
         actualizados = 0
 
         with transaction.atomic():
@@ -209,6 +259,7 @@ class IncidenteViewSet(viewsets.ModelViewSet):
 
         return Response({
             'actualizados': actualizados,
+            'bloqueados': bloqueados,
             'no_encontrados': sorted(set(folios) - encontrados),
         })
 
@@ -265,13 +316,17 @@ class IncidenteViewSet(viewsets.ModelViewSet):
         agregados['generado_en'] = timezone.now()
         return Response(agregados)
 
+    @action(detail=False, methods=['get'], url_path='desempeno', permission_classes=[PuedeAsignar])
+    def desempeno(self, request):
+        return Response(desempeno_de_campo(area=area_de_consulta(request)))
+
 
 class TecnicoListView(APIView):
     def get(self, request):
         tecnicos = UsuarioGIO.objects.filter(rol=UsuarioGIO.Rol.TECNICO, is_active=True)
         if not request.user.tiene_vision_global and request.user.area_operativa:
-            tecnicos = tecnicos.filter(
-                Q(area_operativa=request.user.area_operativa) | Q(area_operativa=''))
+            tecnicos = filtrar_por_zona(tecnicos, request.user.area_operativa)
+        tecnicos = filtrar_por_zona(tecnicos, area_de_consulta(request))
         return Response([
             {'id': t.id, 'expediente': t.expediente, 'nombre': t.nombre_completo,
              'area_operativa': t.area_operativa, 'telefono': t.telefono}
@@ -282,6 +337,7 @@ class TecnicoListView(APIView):
 class EvaluadorListView(APIView):
     def get(self, request):
         evaluadores = UsuarioGIO.objects.filter(rol=UsuarioGIO.Rol.PI_EVALUADOR, is_active=True)
+        evaluadores = filtrar_por_zona(evaluadores, area_de_consulta(request))
         return Response([
             {'id': e.id, 'expediente': e.expediente, 'nombre': e.nombre_completo,
              'area_operativa': e.area_operativa}
@@ -291,12 +347,20 @@ class EvaluadorListView(APIView):
 
 class CentralListView(APIView):
     def get(self, request):
-        valores = (queryset_por_rol(request.user)
-                   .exclude(central='')
-                   .values_list('central', flat=True)
-                   .distinct()
-                   .order_by('central'))
-        return Response([{'id': c, 'nombre': c} for c in valores])
+        consulta = queryset_por_rol(request.user).exclude(central='')
+        area = area_de_consulta(request)
+        if area:
+            consulta = consulta.filter(area_operativa=area)
+        pares = (consulta.values_list('central', 'area_operativa')
+                 .distinct()
+                 .order_by('central', 'area_operativa'))
+        centrales = {}
+        for central, area_central in pares:
+            centrales.setdefault(central, area_central)
+        return Response([
+            {'id': central, 'nombre': central, 'area': area_central}
+            for central, area_central in centrales.items()
+        ])
 
 
 class AreaListView(APIView):
@@ -327,6 +391,60 @@ class CatalogosView(APIView):
         })
 
 
+def _fecha_de_consulta(texto):
+    if not texto:
+        return timezone.localdate()
+    try:
+        return date.fromisoformat(texto)
+    except ValueError:
+        raise ValidationError({'fecha': 'Use el formato AAAA-MM-DD.'})
+
+
+class TurnosView(APIView):
+    """Turnos de planta interna por fecha. Se reemplazan completos al guardar."""
+    permission_classes = [PuedeAsignar]
+
+    def get(self, request):
+        fecha = _fecha_de_consulta(request.query_params.get('fecha'))
+        turnos = (TurnoEvaluador.objects.filter(fecha=fecha)
+                  .select_related('evaluador')
+                  .order_by('turno', 'evaluador__expediente'))
+        return Response(TurnoEvaluadorSerializer(turnos, many=True).data)
+
+    def post(self, request):
+        serializer = GuardarTurnosSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        fecha = serializer.validated_data['fecha']
+        with transaction.atomic():
+            TurnoEvaluador.objects.filter(fecha=fecha).delete()
+            TurnoEvaluador.objects.bulk_create([
+                TurnoEvaluador(fecha=fecha, turno=item['turno'], evaluador=item['evaluador'])
+                for item in serializer.validated_data['asignaciones']
+            ])
+        turnos = (TurnoEvaluador.objects.filter(fecha=fecha)
+                  .select_related('evaluador')
+                  .order_by('turno', 'evaluador__expediente'))
+        return Response(TurnoEvaluadorSerializer(turnos, many=True).data)
+
+
+class RepartoTurnosView(APIView):
+    """Reparte equitativamente entre los evaluadores de turno los folios abiertos sin asignar."""
+    permission_classes = [PuedeAsignar]
+
+    def post(self, request):
+        serializer = RepartoTurnosSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        datos = serializer.validated_data
+        resultado = repartir_folios_del_dia(datos['fecha'], request.user, datos['limite'])
+        return Response({
+            'fecha': resultado['fecha'],
+            'evaluadores_de_turno': resultado['evaluadores_de_turno'],
+            'asignados': resultado['asignados'],
+            'sin_zona': resultado['sin_zona'],
+            'por_evaluador': resultado['por_evaluador'],
+        })
+
+
 class EvidenciaViewSet(viewsets.ModelViewSet):
     serializer_class = EvidenciaIncidenteSerializer
     http_method_names = ['get', 'delete', 'head', 'options']
@@ -338,6 +456,8 @@ class EvidenciaViewSet(viewsets.ModelViewSet):
 
     def perform_destroy(self, instance):
         usuario = self.request.user
+        if instance.incidente.bloqueado_para(usuario):
+            raise PermissionDenied(MENSAJE_BLOQUEADO)
         if not (usuario.tiene_vision_global or instance.subido_por_id == usuario.id):
             raise PermissionDenied('Solo puede eliminar las evidencias que usted cargó.')
         BitacoraIncidente.registrar(

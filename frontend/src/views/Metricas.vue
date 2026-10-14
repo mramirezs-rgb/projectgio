@@ -83,7 +83,7 @@ const exportarTecnico = () => {
   }
   descargarCSV(
     `GIO_Carga_Tecnicos_${marcaDeTiempo()}.csv`,
-    ['Expediente', 'Tecnico', 'Folios totales', 'Folios abiertos'],
+    ['Expediente', 'Técnico de planta externa', 'Folios totales', 'Folios abiertos'],
     datos.value.por_tecnico.map((fila) => [
       fila.tecnico__expediente,
       nombreTecnico(fila),
@@ -211,7 +211,7 @@ const exportarTecnico = () => {
 
       <section class="bloque gio-panel">
         <header class="bloque__cabecera">
-          <h2>Carga por técnico</h2>
+          <h2>Carga por técnico de planta externa</h2>
           <button type="button" class="gio-boton gio-boton--secundario" @click="exportarTecnico">
             Exportar CSV
           </button>
@@ -219,7 +219,7 @@ const exportarTecnico = () => {
         <table class="listado">
           <thead>
             <tr>
-              <th>Técnico</th>
+              <th>Técnico de planta externa</th>
               <th>Expediente</th>
               <th>Totales</th>
               <th>Abiertos</th>

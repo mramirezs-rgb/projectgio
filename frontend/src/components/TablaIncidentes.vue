@@ -16,7 +16,7 @@ const COLUMNAS = [
   { clave: 'empresa', texto: 'Cliente / Empresa', ordenable: false },
   { clave: 'area_operativa', texto: 'Área / Central', ordenable: false },
   { clave: 'estado_enlace', texto: 'Enlace', ordenable: false },
-  { clave: 'tecnico', texto: 'Técnico (PE)', ordenable: false },
+  { clave: 'tecnico', texto: 'Técnico de planta externa', ordenable: false },
   { clave: 'dilacion_dias', texto: 'Dilación', ordenable: true },
   { clave: 'estatus', texto: 'Estatus', ordenable: true },
   { clave: 'fecha_apertura', texto: 'Apertura', ordenable: true },

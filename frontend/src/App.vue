@@ -10,8 +10,8 @@ const router = useRouter()
 const { estaAutenticado, usuario, rol, permisos, cerrarSesion } = useAuth()
 
 const ETIQUETAS_ROL = {
-  [ROLES.TECNICO]: 'Planta Externa',
-  [ROLES.PI_EVALUADOR]: 'Evaluador PI',
+  [ROLES.TECNICO]: 'Técnico de planta externa',
+  [ROLES.PI_EVALUADOR]: 'Técnico',
   [ROLES.PI_SUB]: 'Subgerencia PI',
   [ROLES.ADMIN]: 'Gerencia',
 }
@@ -22,6 +22,7 @@ const enlaces = computed(() => {
   if (rol.value === ROLES.TECNICO || permisos.value.vision_global)
     items.push({ nombre: 'campo', texto: 'Campo' })
   if (permisos.value.vision_global) items.push({ nombre: 'metricas', texto: 'Métricas' })
+  if (permisos.value.asignar) items.push({ nombre: 'turnos', texto: 'Turnos' })
   if (permisos.value.gestionar_usuarios) items.push({ nombre: 'usuarios', texto: 'Usuarios' })
   return items
 })
