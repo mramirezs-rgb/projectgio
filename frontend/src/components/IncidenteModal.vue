@@ -656,6 +656,14 @@ onUnmounted(() => document.removeEventListener('keydown', alPulsarTecla))
   box-shadow: 0 24px 48px -12px rgb(0 0 0 / 0.6);
 }
 
+/* Cabecera, aviso y pestañas mantienen su alto; solo el cuerpo se desplaza.
+   Sin esto, con una bitácora larga el navegador encoge las pestañas hasta taparlas. */
+.caja__cabecera,
+.caja__aviso,
+.pestanas {
+  flex-shrink: 0;
+}
+
 .caja__cabecera {
   display: flex;
   align-items: flex-start;
@@ -758,7 +766,8 @@ onUnmounted(() => document.removeEventListener('keydown', alPulsarTecla))
   display: flex;
   flex-direction: column;
   gap: 1.2rem;
-  flex: 1;
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .rejilla {
