@@ -125,6 +125,15 @@ def folio_valido(folio):
     return len(folio) >= 3
 
 
+def normalizar_telefono(valor):
+    """Solo dígitos y a 10 posiciones, para comparar teléfonos escritos de distinta forma."""
+    crudo = texto(valor)
+    if crudo.endswith('.0'):
+        crudo = crudo[:-2]
+    digitos = ''.join(caracter for caracter in crudo if caracter.isdigit())
+    return digitos[-10:] if len(digitos) >= 10 else ''
+
+
 def limpiar_folio(folio):
     folio = texto(folio)
     return folio[:-2] if folio.endswith('.0') else folio

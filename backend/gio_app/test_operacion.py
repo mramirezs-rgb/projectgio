@@ -10,7 +10,7 @@ from django.utils import timezone
 from rest_framework import status
 
 from .models import BitacoraIncidente, Incidente, TurnoEvaluador
-from .tests import BaseGIOTestCase, imagen_en_memoria
+from .tests import BaseGIOTestCase, UsuarioGIO, imagen_en_memoria
 
 
 def liquidado(folio, tecnico, evaluador, cierre=None, area='PUEBLA'):
@@ -276,19 +276,112 @@ class DesempenoDeCampoTests(BaseGIOTestCase):
         self.assertIsNotNone(fila['mttr_horas_promedio'])
 
 
-class ImportacionNumeroTecnicoTests(BaseGIOTestCase):
-    def test_folio_se_vincula_por_numero_de_tecnico_y_hereda_su_telefono(self):
-        self.tecnico.telefono = '2221112233'
-        self.tecnico.save()
-        contenido = ('FOLIO,NO. TECNICO,TECNICO ASIGNADO,EMPRESA\n'
-                     '98765432,TEC-4410,NOMBRE QUE NO COINCIDE,UNINET\n')
-        with tempfile.TemporaryDirectory() as carpeta:
-            ruta = Path(carpeta) / 'reporte.csv'
-            ruta.write_text(contenido, encoding='utf-8')
-            call_command('ingesta_sisa', '--archivo', str(ruta), '--sin-mover', stdout=io.StringIO())
+ENCABEZADO_SISA = 'FOLIO,EMPRESA,ÁREA,CENTRAL,TÉCNICO ASIGNADO,TELÉFONO TECNICO\n'
 
+
+def correr(comando, contenido, *argumentos):
+    """Ejecuta un comando de importación sobre un CSV con el formato del reporte SISA."""
+    salida = io.StringIO()
+    with tempfile.TemporaryDirectory() as carpeta:
+        ruta = Path(carpeta) / 'reporte.csv'
+        ruta.write_text(ENCABEZADO_SISA + contenido, encoding='utf-8')
+        call_command(comando, '--archivo', str(ruta), *argumentos, stdout=salida)
+    return salida.getvalue()
+
+
+class ImportacionTelefonoTecnicoTests(BaseGIOTestCase):
+    def test_ingesta_guarda_el_telefono_del_reporte_en_el_tecnico(self):
+        correr('ingesta_sisa', '98765432,UNINET,JALAPA,XALAPA,LUIS SERRANO,2221112233\n',
+               '--sin-mover')
+        self.tecnico.refresh_from_db()
+        self.assertEqual(self.tecnico.telefono, '2221112233')
         folio = Incidente.objects.get(folio='98765432')
         self.assertEqual(folio.tecnico, self.tecnico)
-        self.assertEqual(folio.estatus, Incidente.Estatus.ASIGNADO)
-        self.assertEqual(folio.telefono_tecnico, '2221112233')
+        self.assertEqual((folio.area_operativa, folio.central), ('JALAPA', 'XALAPA'))
 
+    def test_ingesta_vincula_por_telefono_cuando_el_nombre_no_coincide(self):
+        self.tecnico.telefono = '222 111 2233'
+        self.tecnico.save()
+        correr('ingesta_sisa', '98765433,UNINET,PUEBLA,LOS PINOS,L. SERRANO M.,2221112233\n',
+               '--sin-mover')
+        folio = Incidente.objects.get(folio='98765433')
+        self.assertEqual(folio.tecnico, self.tecnico)
+        self.assertEqual(folio.estatus, Incidente.Estatus.ASIGNADO)
+
+    def test_ingesta_no_sobrescribe_un_telefono_existente(self):
+        self.tecnico.telefono = '2229998877'
+        self.tecnico.save()
+        correr('ingesta_sisa', '98765434,UNINET,PUEBLA,LOS PINOS,LUIS SERRANO,2221112233\n',
+               '--sin-mover')
+        self.tecnico.refresh_from_db()
+        self.assertEqual(self.tecnico.telefono, '2229998877')
+
+    def test_dry_run_no_guarda_el_telefono(self):
+        correr('ingesta_sisa', '98765435,UNINET,PUEBLA,LOS PINOS,LUIS SERRANO,2221112233\n',
+               '--dry-run')
+        self.tecnico.refresh_from_db()
+        self.assertEqual(self.tecnico.telefono, '')
+
+    def test_importar_tecnicos_da_de_alta_con_telefono_y_completa_existentes(self):
+        correr('importar_tecnicos',
+               '1,UNINET,PUEBLA,LOS PINOS,JUAN CARLOS HERNANDEZ MUNOZ,2222299341\n'
+               '2,UNINET,PUEBLA,LOS PINOS,LUIS SERRANO,2221112233\n',
+               '--confirmar')
+        nuevo = UsuarioGIO.objects.get(first_name='JUAN CARLOS')
+        self.assertEqual(nuevo.telefono, '2222299341')
+        self.assertEqual(nuevo.rol, UsuarioGIO.Rol.TECNICO)
+        self.tecnico.refresh_from_db()
+        self.assertEqual(self.tecnico.telefono, '2221112233')
+
+    def test_importar_tecnicos_sin_confirmar_no_cambia_nada(self):
+        salida = correr('importar_tecnicos', '2,UNINET,PUEBLA,LOS PINOS,LUIS SERRANO,2221112233\n')
+        self.assertIn('sin teléfono', salida)
+        self.tecnico.refresh_from_db()
+        self.assertEqual(self.tecnico.telefono, '')
+
+
+ENCABEZADO_OQU = 'FOLIO,EMPRESA,ÁREA,TÉCNICO ASIGNADO,OQU\n'
+
+
+def correr_oqu(comando, contenido, *argumentos):
+    salida = io.StringIO()
+    with tempfile.TemporaryDirectory() as carpeta:
+        ruta = Path(carpeta) / 'reporte.csv'
+        ruta.write_text(ENCABEZADO_OQU + contenido, encoding='utf-8')
+        call_command(comando, '--archivo', str(ruta), *argumentos, stdout=salida)
+    return salida.getvalue()
+
+
+class OquPlantaInternaTests(BaseGIOTestCase):
+    def test_folio_nuevo_toma_al_tecnico_de_planta_interna_de_oqu(self):
+        correr_oqu('ingesta_sisa', '55500001,UNINET,PUEBLA,LUIS SERRANO,CARLA EVALUADORA\n',
+                   '--sin-mover')
+        folio = Incidente.objects.get(folio='55500001')
+        self.assertEqual(folio.evaluador, self.evaluador)
+        self.assertEqual(folio.oqu, 'CARLA EVALUADORA')
+
+    def test_folio_existente_sin_planta_interna_la_completa(self):
+        self.ajeno.evaluador = None
+        self.ajeno.save()
+        correr_oqu('ingesta_sisa', f'{self.ajeno.folio},UNINET,VERACRUZ,,CARLA EVALUADORA\n',
+                   '--sin-mover')
+        self.ajeno.refresh_from_db()
+        self.assertEqual(self.ajeno.evaluador, self.evaluador)
+
+    def test_folio_existente_conserva_su_tecnico_de_planta_interna(self):
+        correr_oqu('ingesta_sisa', f'{self.ajeno.folio},UNINET,VERACRUZ,,CARLA EVALUADORA\n',
+                   '--sin-mover')
+        self.ajeno.refresh_from_db()
+        self.assertEqual(self.ajeno.evaluador, self.otro_evaluador)
+
+    def test_oqu_desconocido_se_reporta_y_no_se_asigna(self):
+        salida = correr_oqu('ingesta_sisa', '55500002,UNINET,PUEBLA,,JUDITH DIAZ LOZANO\n',
+                            '--sin-mover')
+        self.assertIn('JUDITH DIAZ LOZANO', salida)
+        self.assertIsNone(Incidente.objects.get(folio='55500002').evaluador)
+
+    def test_importar_tecnicos_da_de_alta_al_oqu_como_planta_interna(self):
+        correr_oqu('importar_tecnicos', '1,UNINET,PUEBLA,,JUDITH DIAZ LOZANO\n', '--confirmar')
+        nuevo = UsuarioGIO.objects.get(first_name='JUDITH')
+        self.assertEqual(nuevo.rol, UsuarioGIO.Rol.PI_EVALUADOR)
+        self.assertTrue(nuevo.expediente.startswith('OQU-'))

@@ -19,6 +19,7 @@ from ._sisa import (
     leer_tabla,
     limpiar_central,
     limpiar_folio,
+    normalizar_telefono,
     primer_valor,
 )
 
@@ -33,11 +34,6 @@ ESTADOS_ENLACE = {
     'OK': Incidente.EstadoEnlace.UP,
     'FALLA': Incidente.EstadoEnlace.DOWN,
 }
-
-NUMEROS_TECNICO = [
-    'NUMERO TECNICO', 'NUM TECNICO', 'NO TECNICO', 'NO. TECNICO', 'NUMERO DE TECNICO',
-    'EXPEDIENTE TECNICO', 'NUMERO EMPLEADO',
-]
 
 CAMPOS_SISA = (
     'incidente', 'referencia', 'empresa', 'tipo_servicio', 'area_operativa', 'central',
@@ -83,6 +79,7 @@ class Command(BaseCommand):
             return
 
         self._cache_tecnicos = None
+        self._cache_evaluadores = None
         totales = {'archivos': 0, 'nuevos': 0, 'actualizados': 0, 'omitidos': 0, 'errores': 0}
 
         for ruta in rutas:
@@ -124,6 +121,7 @@ class Command(BaseCommand):
     def _tecnicos(self):
         if self._cache_tecnicos is None:
             self._cache_tecnicos = {}
+            self._cache_telefonos = {}
             consulta = UsuarioGIO.objects.filter(
                 rol=UsuarioGIO.Rol.TECNICO, is_active=True
             ).annotate(
@@ -135,33 +133,70 @@ class Command(BaseCommand):
                               ' '.join(usuario.completo.split()).upper()}:
                     if clave:
                         self._cache_tecnicos.setdefault(clave, usuario)
+                telefono = normalizar_telefono(usuario.telefono)
+                if telefono:
+                    self._cache_telefonos.setdefault(telefono, usuario)
         return self._cache_tecnicos
 
-    def _resolver_tecnico(self, numero, nombre):
-        """Vincula al técnico por su número (expediente) y, si no viene, por su nombre."""
-        if numero:
-            numero = numero[:-2] if numero.endswith('.0') else numero
-            usuario = self._tecnicos().get(numero.strip().upper())
-            if usuario and usuario.rol == UsuarioGIO.Rol.TECNICO:
+    def _resolver_tecnico(self, nombre, telefono):
+        """Vincula al técnico por nombre (o expediente) y, si no coincide, por su teléfono."""
+        clave = ' '.join(nombre.split()).upper() if nombre else ''
+        if clave:
+            usuario = self._tecnicos().get(clave)
+            if usuario:
                 return usuario, ''
-        if not nombre:
-            return None, ''
-        clave = ' '.join(nombre.split()).upper()
-        usuario = self._tecnicos().get(clave)
-        if usuario:
-            return usuario, ''
-        usuario = UsuarioGIO.objects.filter(
-            Q(expediente__iexact=clave) | Q(username__iexact=clave),
-            rol=UsuarioGIO.Rol.TECNICO,
-        ).first()
-        if usuario:
-            return usuario, ''
+            usuario = UsuarioGIO.objects.filter(
+                Q(expediente__iexact=clave) | Q(username__iexact=clave),
+                rol=UsuarioGIO.Rol.TECNICO,
+            ).first()
+            if usuario:
+                return usuario, ''
+        if telefono:
+            self._tecnicos()
+            usuario = self._cache_telefonos.get(telefono)
+            if usuario:
+                return usuario, ''
         return None, clave
+
+    def _evaluadores(self):
+        if self._cache_evaluadores is None:
+            self._cache_evaluadores = {}
+            consulta = UsuarioGIO.objects.filter(
+                rol=UsuarioGIO.Rol.PI_EVALUADOR, is_active=True
+            ).annotate(
+                completo=Concat('first_name', Value(' '), 'last_name'),
+            )
+            for usuario in consulta:
+                for clave in {usuario.expediente.upper(),
+                              usuario.username.upper(),
+                              ' '.join(usuario.completo.split()).upper()}:
+                    if clave:
+                        self._cache_evaluadores.setdefault(clave, usuario)
+        return self._cache_evaluadores
+
+    def _resolver_evaluador(self, nombre):
+        """La columna OQU trae al técnico de planta interna responsable del folio."""
+        clave = ' '.join(nombre.split()).upper() if nombre else ''
+        if not clave:
+            return None, ''
+        usuario = self._evaluadores().get(clave)
+        return (usuario, '') if usuario else (None, clave)
+
+    def _vincular_telefono(self, tecnico, telefono):
+        """Guarda en el usuario el teléfono que trae el reporte si aún no tiene uno."""
+        if not telefono or tecnico.telefono:
+            return False
+        tecnico.telefono = telefono
+        tecnico.save(update_fields=['telefono'])
+        self._cache_telefonos.setdefault(telefono, tecnico)
+        return True
 
     def _procesar_archivo(self, ruta):
         marco = leer_tabla(ruta)
         nuevos = actualizados = omitidos = 0
         sin_enlazar = set()
+        oqu_sin_enlazar = set()
+        telefonos_vinculados = set()
 
         with transaction.atomic():
             for _, cruda in marco.iterrows():
@@ -174,12 +209,18 @@ class Command(BaseCommand):
                 datos = self._mapear(fila)
                 tecnico_nombre = primer_valor(
                     fila, ['TECNICO ASIGNADO', 'TECNICO', 'RESPONSABLE', 'PROVEEDOR'])
-                tecnico_numero = primer_valor(fila, NUMEROS_TECNICO)
-                tecnico, no_enlazado = self._resolver_tecnico(tecnico_numero, tecnico_nombre)
+                telefono = normalizar_telefono(datos.get('telefono_tecnico'))
+                tecnico, no_enlazado = self._resolver_tecnico(tecnico_nombre, telefono)
                 if no_enlazado:
                     sin_enlazar.add(no_enlazado)
-                if tecnico and not datos.get('telefono_tecnico') and tecnico.telefono:
-                    datos['telefono_tecnico'] = tecnico.telefono
+                if tecnico:
+                    if self._vincular_telefono(tecnico, telefono):
+                        telefonos_vinculados.add(tecnico.expediente)
+                    if not datos.get('telefono_tecnico') and tecnico.telefono:
+                        datos['telefono_tecnico'] = tecnico.telefono
+                evaluador, oqu_no_enlazado = self._resolver_evaluador(datos.get('oqu'))
+                if oqu_no_enlazado:
+                    oqu_sin_enlazar.add(oqu_no_enlazado)
 
                 existente = Incidente.objects.filter(folio=folio).first()
 
@@ -195,6 +236,10 @@ class Command(BaseCommand):
                         if getattr(existente, campo) != valor:
                             setattr(existente, campo, valor)
                             cambios.append(campo)
+                    # Solo se completa el técnico de planta interna si el folio no tiene uno.
+                    if evaluador and existente.evaluador_id is None:
+                        existente.evaluador = evaluador
+                        cambios.append('evaluador')
                     if not cambios:
                         omitidos += 1
                         continue
@@ -223,6 +268,7 @@ class Command(BaseCommand):
                     estatus=estatus,
                     fecha_apertura=apertura,
                     tecnico=tecnico,
+                    evaluador=evaluador,
                     origen_sisa=ruta.name,
                     **{campo: datos.get(campo) or '' for campo in CAMPOS_SISA
                        if campo != 'fecha_ingreso'},
@@ -243,6 +289,17 @@ class Command(BaseCommand):
             self.stdout.write(self.style.WARNING(
                 f'  {len(sin_enlazar)} técnico(s) del archivo sin usuario GIO: {muestra}'
             ))
+        if oqu_sin_enlazar:
+            muestra = ', '.join(sorted(oqu_sin_enlazar)[:8])
+            self.stdout.write(self.style.WARNING(
+                f'  {len(oqu_sin_enlazar)} técnico(s) de planta interna (OQU) sin usuario GIO: '
+                f'{muestra}'
+            ))
+        if telefonos_vinculados:
+            self.stdout.write(
+                f'  teléfono vinculado a {len(telefonos_vinculados)} técnico(s): '
+                f'{", ".join(sorted(telefonos_vinculados))}'
+            )
         return {'nuevos': nuevos, 'actualizados': actualizados, 'omitidos': omitidos}
 
     def _mapear(self, fila):
