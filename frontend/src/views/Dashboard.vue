@@ -23,10 +23,6 @@ import {
 } from '../utils/alerts.js'
 import { descargarCSV, formatearFecha, formatearHoras, marcaDeTiempo } from '../utils/formato.js'
 
-// Filas por página: la tabla muestra 20 folios; el kanban conserva su carga completa.
-const FILAS_TABLA = 20
-const FILAS_KANBAN = 50
-
 const { usuario, rol, permisos, esGerencia } = useAuth()
 const {
   cargando,
@@ -39,6 +35,7 @@ const {
   evaluadoresZona,
   centralesZona,
   filtros,
+  modo,
   paginacion,
   totalPaginas,
   columnasKanban,
@@ -46,6 +43,7 @@ const {
   cargarCatalogos,
   actualizarZona,
   cargarIncidentes,
+  cargarMasColumna,
   aplicarFiltros,
   aplicarFiltrosConRetardo,
   limpiarFiltros,
@@ -97,6 +95,7 @@ const seleccionados = computed(() =>
 
 const rangoMostrado = computed(() => {
   if (!paginacion.total) return '0'
+  if (vista.value === 'kanban') return `${incidentes.value.length} de ${paginacion.total}`
   const desde = (paginacion.pagina - 1) * paginacion.tamano + 1
   const hasta = Math.min(paginacion.pagina * paginacion.tamano, paginacion.total)
   return `${desde}–${hasta} de ${paginacion.total}`
@@ -132,10 +131,18 @@ const abrirEditar = async (incidente) => {
 }
 
 watch(vista, async (nueva) => {
-  paginacion.tamano = nueva === 'tabla' ? FILAS_TABLA : FILAS_KANBAN
+  modo.value = nueva
   paginacion.pagina = 1
   await cargarIncidentes({ conMetricas: false })
 })
+
+const cargarMas = async (estatus) => {
+  try {
+    await cargarMasColumna(estatus)
+  } catch (error) {
+    mostrarError('No se pudieron cargar más folios', mensajeDeError(error))
+  }
+}
 
 // Cambiar área o central redefine qué técnicos y centrales son válidos en los filtros.
 const alCambiarZona = async () => {
@@ -505,6 +512,7 @@ const ordenar = async (campo) => {
       :puede-mover="permisos.asignar || permisos.liquidar"
       @editar="abrirEditar"
       @mover="moverEnTablero"
+      @cargar-mas="cargarMas"
     />
 
     <TablaIncidentes
@@ -518,7 +526,11 @@ const ordenar = async (campo) => {
       @actualizar:seleccion="seleccion = $event"
     />
 
-    <nav v-if="!cargando && totalPaginas > 1" class="paginas" aria-label="Paginación">
+    <nav
+      v-if="!cargando && vista === 'tabla' && totalPaginas > 1"
+      class="paginas"
+      aria-label="Paginación"
+    >
       <button
         type="button"
         class="gio-boton gio-boton--secundario"

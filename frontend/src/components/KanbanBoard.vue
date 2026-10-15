@@ -8,7 +8,7 @@ const props = defineProps({
   puedeMover: { type: Boolean, default: false },
 })
 
-const emit = defineEmits(['editar', 'mover'])
+const emit = defineEmits(['editar', 'mover', 'cargar-mas'])
 
 const arrastrado = ref(null)
 const columnaActiva = ref(null)
@@ -64,7 +64,9 @@ const soltar = (evento, idColumna) => {
     >
       <header class="tablero__cabecera" :style="{ borderTopColor: columna.color }">
         <span class="tablero__titulo">{{ columna.titulo }}</span>
-        <span class="tablero__conteo">{{ columna.items.length }}</span>
+        <span class="tablero__conteo" :title="`${columna.items.length} cargados de ${columna.total}`">
+          {{ columna.hayMas ? `${columna.items.length} / ${columna.total}` : columna.items.length }}
+        </span>
       </header>
 
       <div class="tablero__cuerpo">
@@ -125,6 +127,14 @@ const soltar = (evento, idColumna) => {
         </article>
 
         <p v-if="columna.items.length === 0" class="gio-vacio">Sin folios</p>
+        <button
+          v-if="columna.hayMas"
+          type="button"
+          class="gio-boton gio-boton--secundario tablero__mas"
+          @click="emit('cargar-mas', columna.id)"
+        >
+          Cargar más ({{ columna.total - columna.items.length }} restantes)
+        </button>
       </div>
     </section>
   </div>
@@ -185,6 +195,10 @@ const soltar = (evento, idColumna) => {
   font-weight: 700;
   padding: 0.1rem 0.5rem;
   border-radius: 999px;
+}
+
+.tablero__mas {
+  width: 100%;
 }
 
 .tablero__cuerpo {
