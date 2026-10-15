@@ -246,29 +246,36 @@ class EvidenciaIncidente(models.Model):
 
 
 class TurnoEvaluador(models.Model):
-    """Turno de un técnico de planta interna (evaluador) en una fecha determinada."""
+    """Horario de un técnico de planta interna (evaluador) en una fecha.
 
-    class Turno(models.TextChoices):
-        MATUTINO = 'MATUTINO', 'Matutino'
-        VESPERTINO = 'VESPERTINO', 'Vespertino'
-        NOCTURNO = 'NOCTURNO', 'Nocturno'
+    Si la hora de fin es menor que la de inicio, el turno termina al día siguiente
+    (por ejemplo 23:00–07:00) y pertenece a la fecha en que empieza.
+    """
 
     fecha = models.DateField(db_index=True)
-    turno = models.CharField(max_length=12, choices=Turno.choices)
+    hora_inicio = models.TimeField()
+    hora_fin = models.TimeField()
     evaluador = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
                                   related_name='turnos')
 
     class Meta:
         db_table = 'incidentes_turnos'
-        ordering = ['fecha', 'turno', 'evaluador__expediente']
+        ordering = ['fecha', 'hora_inicio', 'evaluador__expediente']
         verbose_name = 'turno'
         verbose_name_plural = 'turnos'
         constraints = [
             models.UniqueConstraint(fields=['fecha', 'evaluador'], name='turno_unico_por_dia'),
+            models.CheckConstraint(condition=~models.Q(hora_inicio=models.F('hora_fin')),
+                                   name='turno_con_duracion'),
         ]
 
     def __str__(self):
-        return f'{self.fecha:%Y-%m-%d} · {self.get_turno_display()} · {self.evaluador_id}'
+        return (f'{self.fecha:%Y-%m-%d} · {self.hora_inicio:%H:%M}–{self.hora_fin:%H:%M}'
+                f' · {self.evaluador_id}')
+
+    @property
+    def cruza_medianoche(self):
+        return self.hora_fin < self.hora_inicio
 
 
 class BitacoraIncidente(models.Model):

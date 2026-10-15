@@ -1,8 +1,8 @@
 # estiloatlassian
 
 Referencia de diseño catalogada para GIO, tomada del sistema visual de Atlassian (Jira, Confluence,
-Trello). **No está aplicada**: el tema actual de GIO sigue siendo el de `frontend/src/assets/main.css`.
-Se usa solo cuando se pida explícitamente "aplicar el estiloatlassian".
+Trello). **No está aplicada**: se probó y se reemplazó por [`estilobmw`](estilobmw.md). Las notas de
+aplicación y el tema oscuro derivado que siguen quedan como referencia por si se vuelve a usar.
 
 - Fuente original: [`fuentes/atlassian-DESIGN.md`](fuentes/atlassian-DESIGN.md) (copia sin modificar).
 - Origen declarado en el archivo: https://www.atlassian.com
@@ -115,10 +115,38 @@ El tema se controla con variables CSS en `frontend/src/assets/main.css` y el atr
 | `--acento` | `#1c2b42` |
 | `--radio` | `8px` (tarjetas) / `4px` (campos) |
 
-**Pendiente de decidir antes de aplicarlo:**
+Diferencias con la tabla anterior al aplicarlo: `--panel-alto` es `#f0f1f2` (hover discreto) y el
+azul de selección `#cfe1fd` vive en una variable aparte, `--seleccion`, para no pintar de azul cada
+hover. Los botones secundarios dentro de la barra se invierten (borde y texto blancos).
 
-1. El estilo solo define tema claro. GIO arranca en oscuro: hay que elegir entre derivar una versión
-   oscura o dejar el estiloatlassian solo para el modo claro.
-2. Si reemplaza al tema claro actual o se agrega como tema adicional seleccionable.
-3. El acento `#1c2b42` es casi tan oscuro como el texto: los botones principales se distinguen por
-   forma y relleno, no por color. Conviene revisarlo con los usuarios de Planta Interna.
+### Variables nuevas
+
+| Variable | Uso |
+| --- | --- |
+| `--seleccion` | Fila marcada, filtro activo |
+| `--resalte` | Hover de filas, columna de destino del Kanban, día actual |
+| `--velo` | Fondo detrás de los modales |
+| `--linea` | Separadores de filas en tablas |
+| `--borde-campo` | Borde de inputs, selects y botones secundarios |
+| `--sobre-acento`, `--acento-hover` | Texto y hover del botón principal |
+| `--sobre-barra`, `--sobre-barra-apagado`, `--barra-borde` | Barra superior |
+| `--radio-sm`, `--radio-campo`, `--radio`, `--radio-pildora` | 3 / 4 / 8 / 9999 px |
+| `--curva`, `--rapido`, `--medio` | `cubic-bezier(0.4, 0, 0, 1)`, 75 ms, 400 ms |
+
+Clases nuevas: `.gio-aviso` con `--error`, `--alerta` y `--ok` para mensajes dentro de paneles.
+
+## Tema oscuro derivado
+
+El estilo original solo tiene tema claro. El oscuro mantiene sus reglas (plano, un acento, barra casi
+negra) con superficies grises neutras y el acento aclarado para que contraste:
+
+| Token | Valor | Contraste |
+| --- | --- | --- |
+| Fondo / panel / campo | `#161718` / `#1f1f21` / `#242528` | |
+| Barra | `#101214` (igual que en claro) | |
+| Selección | `#1c2b42` (el acento del tema claro) | texto 10.9:1 |
+| Texto / secundario / tenue | `#dfe1e4` / `#a9abaf` / `#8c8f97` | 12.6 / 7.2 / 5.1 sobre panel |
+| Acento | `#85b8ff`, con texto `#101214` en botones | 8.1:1 sobre panel, 9.2:1 en botón |
+| Borde / borde de campo | `#37383c` / `#7e8188` | campo 3.9:1 |
+
+Los colores de estado no cambian entre temas; en oscuro se usan sus variantes claras para texto.

@@ -148,34 +148,73 @@ class TurnosYRepartoTests(BaseGIOTestCase):
             for n in range(4)
         ]
 
-    def turnar(self, fecha, *evaluadores):
+    HORARIO = {'hora_inicio': '06:00', 'hora_fin': '14:00'}
+
+    def programar(self, evaluadores, desde, hasta, horarios):
         self.autenticar(self.admin)
         return self.client.post(self.url_turnos, {
-            'fecha': fecha.isoformat(),
-            'asignaciones': [{'evaluador': e.pk, 'turno': 'MATUTINO'} for e in evaluadores],
+            'evaluadores': [e.pk for e in evaluadores],
+            'desde': desde.isoformat(),
+            'hasta': hasta.isoformat(),
+            'horarios': horarios,
         }, format='json')
 
-    def test_supervision_guarda_y_consulta_turnos(self):
-        respuesta = self.turnar(self.hoy, self.evaluador, self.otro_evaluador)
+    def turnar(self, fecha, *evaluadores):
+        return self.programar(evaluadores, fecha, fecha, [self.HORARIO] * 7)
+
+    def lunes(self):
+        return self.hoy - timedelta(days=self.hoy.weekday())
+
+    def test_semana_de_6_a_14_con_sabado_de_15_a_23(self):
+        lunes = self.lunes()
+        horarios = [self.HORARIO] * 5 + [{'hora_inicio': '15:00', 'hora_fin': '23:00'}, None]
+        respuesta = self.programar([self.evaluador, self.otro_evaluador], lunes,
+                                   lunes + timedelta(days=6), horarios)
         self.assertEqual(respuesta.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(respuesta.data), 2)
-        consulta = self.client.get(self.url_turnos, {'fecha': self.hoy.isoformat()})
-        self.assertEqual({t['evaluador_expediente'] for t in consulta.data},
-                         {'OQU-8821', 'OQU-9000'})
+        self.assertEqual(respuesta.data['guardados'], 12)
 
-    def test_guardar_turnos_reemplaza_los_del_dia(self):
-        self.turnar(self.hoy, self.evaluador, self.otro_evaluador)
+        consulta = self.client.get(self.url_turnos, {
+            'desde': lunes.isoformat(), 'hasta': (lunes + timedelta(days=6)).isoformat()}).data
+        self.assertEqual(len(consulta), 12)
+        sabado = (lunes + timedelta(days=5)).isoformat()
+        self.assertEqual({(t['hora_inicio'], t['hora_fin']) for t in consulta if t['fecha'] == sabado},
+                         {('15:00', '23:00')})
+        domingo = (lunes + timedelta(days=6)).isoformat()
+        self.assertFalse([t for t in consulta if t['fecha'] == domingo])
+
+    def test_descanso_elimina_el_dia_y_sin_cambios_lo_conserva(self):
+        lunes = self.lunes()
+        self.programar([self.evaluador], lunes, lunes + timedelta(days=6), [self.HORARIO] * 7)
+        self.programar([self.evaluador], lunes, lunes + timedelta(days=6),
+                       [{'descanso': True}] + [None] * 6)
+        self.assertFalse(TurnoEvaluador.objects.filter(fecha=lunes).exists())
+        self.assertTrue(TurnoEvaluador.objects.filter(fecha=lunes + timedelta(days=1)).exists())
+
+    def test_reprogramar_reemplaza_el_horario_del_dia(self):
         self.turnar(self.hoy, self.evaluador)
-        self.assertEqual(TurnoEvaluador.objects.filter(fecha=self.hoy).count(), 1)
+        self.programar([self.evaluador], self.hoy, self.hoy,
+                       [{'hora_inicio': '15:00', 'hora_fin': '23:00'}] * 7)
+        turno = TurnoEvaluador.objects.get(fecha=self.hoy, evaluador=self.evaluador)
+        self.assertEqual(turno.hora_inicio.strftime('%H:%M'), '15:00')
 
-    def test_un_tecnico_no_puede_tener_dos_turnos_el_mismo_dia(self):
-        self.autenticar(self.admin)
-        respuesta = self.client.post(self.url_turnos, {
-            'fecha': self.hoy.isoformat(),
-            'asignaciones': [{'evaluador': self.evaluador.pk, 'turno': 'MATUTINO'},
-                             {'evaluador': self.evaluador.pk, 'turno': 'NOCTURNO'}],
-        }, format='json')
-        self.assertEqual(respuesta.status_code, status.HTTP_400_BAD_REQUEST)
+    def test_turno_nocturno_cruza_medianoche(self):
+        self.programar([self.evaluador], self.hoy, self.hoy,
+                       [{'hora_inicio': '23:00', 'hora_fin': '07:00'}] * 7)
+        consulta = self.client.get(self.url_turnos, {'fecha': self.hoy.isoformat()}).data
+        self.assertTrue(consulta[0]['cruza_medianoche'])
+
+    def test_validaciones_de_la_programacion(self):
+        casos = [
+            ([self.evaluador], self.hoy, self.hoy, [{'hora_inicio': '06:00', 'hora_fin': '06:00'}] * 7),
+            ([self.evaluador], self.hoy, self.hoy - timedelta(days=1), [self.HORARIO] * 7),
+            ([self.evaluador], self.hoy, self.hoy + timedelta(days=70), [self.HORARIO] * 7),
+            ([self.evaluador], self.hoy, self.hoy, [None] * 7),
+            ([self.tecnico], self.hoy, self.hoy, [self.HORARIO] * 7),
+        ]
+        for evaluadores, desde, hasta, horarios in casos:
+            respuesta = self.programar(evaluadores, desde, hasta, horarios)
+            self.assertEqual(respuesta.status_code, status.HTTP_400_BAD_REQUEST, respuesta.data)
+        self.assertFalse(TurnoEvaluador.objects.exists())
 
     def test_planta_externa_no_gestiona_turnos(self):
         self.autenticar(self.tecnico)

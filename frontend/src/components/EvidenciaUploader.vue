@@ -190,15 +190,15 @@ const quitar = async (evidencia) => {
 .evidencias__barra {
   height: 6px;
   background-color: var(--panel-alto);
-  border-radius: 999px;
+  border-radius: var(--radio-sm);
   overflow: hidden;
 }
 
 .evidencias__barra span {
   display: block;
   height: 100%;
-  background: linear-gradient(90deg, var(--acento), var(--acento-claro));
-  transition: width 0.2s ease;
+  background: var(--acento);
+  transition: width var(--medio) var(--curva);
 }
 
 .evidencias__problema,
@@ -206,7 +206,7 @@ const quitar = async (evidencia) => {
   margin: 0;
   font-size: 0.78rem;
   padding: 0.5rem 0.65rem;
-  border-radius: 8px;
+  border-radius: var(--radio);
 }
 
 .evidencias__problema {
@@ -234,7 +234,7 @@ const quitar = async (evidencia) => {
 .evidencias__item {
   background-color: var(--superficie);
   border: 1px solid var(--borde);
-  border-radius: 8px;
+  border-radius: var(--radio);
   overflow: hidden;
   display: flex;
   flex-direction: column;

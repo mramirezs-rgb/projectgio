@@ -637,8 +637,7 @@ onUnmounted(() => document.removeEventListener('keydown', alPulsarTecla))
 .velo {
   position: fixed;
   inset: 0;
-  background-color: rgb(2 6 23 / 0.8);
-  backdrop-filter: blur(3px);
+  background-color: var(--velo);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -653,7 +652,6 @@ onUnmounted(() => document.removeEventListener('keydown', alPulsarTecla))
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  box-shadow: 0 24px 48px -12px rgb(0 0 0 / 0.6);
 }
 
 /* Cabecera, aviso y pestañas mantienen su alto; solo el cuerpo se desplaza.
@@ -683,12 +681,12 @@ onUnmounted(() => document.removeEventListener('keydown', alPulsarTecla))
 
 .caja__marca {
   background-color: var(--acento);
-  color: #fff;
+  color: var(--sobre-acento);
   font-size: 0.65rem;
-  font-weight: 800;
+  font-weight: 700;
   letter-spacing: 0.06em;
   padding: 0.25rem 0.5rem;
-  border-radius: 5px;
+  border-radius: var(--radio-sm);
   margin-top: 0.2rem;
 }
 
@@ -746,7 +744,7 @@ onUnmounted(() => document.removeEventListener('keydown', alPulsarTecla))
   border-bottom: 2px solid transparent;
   color: var(--apagado);
   font-size: 0.8125rem;
-  font-weight: 600;
+  font-weight: 700;
   white-space: nowrap;
 }
 
@@ -755,9 +753,8 @@ onUnmounted(() => document.removeEventListener('keydown', alPulsarTecla))
 }
 
 .pestanas__btn--activa {
-  color: var(--acento-claro);
-  border-bottom-color: var(--acento-claro);
-  background-color: rgb(56 189 248 / 0.06);
+  color: var(--texto);
+  border-bottom-color: var(--texto);
 }
 
 .caja__cuerpo {
@@ -828,7 +825,7 @@ onUnmounted(() => document.removeEventListener('keydown', alPulsarTecla))
   background-color: var(--superficie);
   border: 1px solid var(--borde);
   border-left: 3px solid var(--acento);
-  border-radius: 8px;
+  border-radius: var(--radio);
   padding: 0.6rem 0.75rem;
 }
 

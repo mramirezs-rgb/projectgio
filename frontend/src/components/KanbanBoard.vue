@@ -8,7 +8,7 @@ const props = defineProps({
   puedeMover: { type: Boolean, default: false },
 })
 
-const emit = defineEmits(['editar', 'mover'])
+const emit = defineEmits(['editar', 'mover', 'cargar-mas'])
 
 const arrastrado = ref(null)
 const columnaActiva = ref(null)
@@ -64,7 +64,9 @@ const soltar = (evento, idColumna) => {
     >
       <header class="tablero__cabecera" :style="{ borderTopColor: columna.color }">
         <span class="tablero__titulo">{{ columna.titulo }}</span>
-        <span class="tablero__conteo">{{ columna.items.length }}</span>
+        <span class="tablero__conteo" :title="`${columna.items.length} cargados de ${columna.total}`">
+          {{ columna.hayMas ? `${columna.items.length} / ${columna.total}` : columna.items.length }}
+        </span>
       </header>
 
       <div class="tablero__cuerpo">
@@ -125,6 +127,14 @@ const soltar = (evento, idColumna) => {
         </article>
 
         <p v-if="columna.items.length === 0" class="gio-vacio">Sin folios</p>
+        <button
+          v-if="columna.hayMas"
+          type="button"
+          class="gio-boton gio-boton--secundario tablero__mas"
+          @click="emit('cargar-mas', columna.id)"
+        >
+          Cargar más ({{ columna.total - columna.items.length }} restantes)
+        </button>
       </div>
     </section>
   </div>
@@ -139,7 +149,7 @@ const soltar = (evento, idColumna) => {
 }
 
 .tablero__columna {
-  background-color: var(--panel);
+  background-color: var(--superficie);
   border: 1px solid var(--borde);
   border-radius: var(--radio);
   display: flex;
@@ -147,16 +157,16 @@ const soltar = (evento, idColumna) => {
   max-height: calc(100vh - 300px);
   min-height: 160px;
   transition:
-    border-color 0.15s ease,
-    background-color 0.15s ease;
+    border-color var(--rapido) var(--curva),
+    background-color var(--rapido) var(--curva);
 }
 
 .tablero__columna--destino {
-  border-color: rgb(56 189 248 / 0.45);
+  border-color: var(--borde-campo);
 }
 
 .tablero__columna--activa {
-  background-color: rgb(56 189 248 / 0.07);
+  background-color: var(--resalte);
   border-color: var(--acento-claro);
 }
 
@@ -184,7 +194,11 @@ const soltar = (evento, idColumna) => {
   font-size: 0.72rem;
   font-weight: 700;
   padding: 0.1rem 0.5rem;
-  border-radius: 999px;
+  border-radius: var(--radio-sm);
+}
+
+.tablero__mas {
+  width: 100%;
 }
 
 .tablero__cuerpo {
@@ -196,10 +210,10 @@ const soltar = (evento, idColumna) => {
 }
 
 .ficha {
-  background-color: var(--superficie);
+  background-color: var(--panel);
   border: 1px solid var(--borde);
   border-left: 3px solid var(--borde);
-  border-radius: 8px;
+  border-radius: var(--radio);
   padding: 0.7rem;
   cursor: pointer;
   transition:
@@ -299,7 +313,7 @@ const soltar = (evento, idColumna) => {
 
 .ficha__evidencias {
   color: var(--indigo-texto);
-  font-weight: 600;
+  font-weight: 700;
 }
 
 .ficha__mttr {
@@ -314,7 +328,7 @@ const soltar = (evento, idColumna) => {
 .ficha__pendiente {
   color: var(--ambar-texto);
   border: 1px solid rgb(245 158 11 / 0.4);
-  border-radius: 999px;
+  border-radius: var(--radio-sm);
   padding: 0 0.35rem;
 }
 </style>

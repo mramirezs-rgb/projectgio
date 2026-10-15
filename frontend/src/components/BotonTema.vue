@@ -55,7 +55,8 @@ const etiqueta = computed(() =>
 <style scoped>
 .boton-tema {
   padding: 0.5rem;
-  width: 38px;
-  height: 38px;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radio-pildora);
 }
 </style>

@@ -1,7 +1,7 @@
 import { ref, watch } from 'vue'
 
 const CLAVE = 'gio_tema'
-const COLOR_BARRA = { dark: '#0b1120', light: '#f1f5f9' }
+const COLOR_BARRA = { dark: '#1a2129', light: '#ffffff' }
 
 const leerGuardado = () => {
   try {

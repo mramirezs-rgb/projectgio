@@ -19,16 +19,17 @@ from usuarios.permissions import PuedeAsignar, PuedeCrearIncidente, PuedeEditarI
 from .desempeno import desempeno_de_campo
 from .filters import IncidenteFilter
 from .models import BitacoraIncidente, EvidenciaIncidente, Incidente, TurnoEvaluador
-from .reparto import repartir_folios_del_dia
+from .reparto import programar_turnos, repartir_folios_del_dia
 from .serializers import (
     AsignacionMasivaSerializer,
     BitacoraIncidenteSerializer,
     EvidenciaIncidenteSerializer,
-    GuardarTurnosSerializer,
     IncidenteEvaluadorSerializer,
     IncidenteListaSerializer,
     IncidenteSerializer,
     IncidenteTecnicoSerializer,
+    MAX_DIAS_PROGRAMACION,
+    ProgramarTurnosSerializer,
     RepartoTurnosSerializer,
     TurnoEvaluadorSerializer,
 )
@@ -391,40 +392,40 @@ class CatalogosView(APIView):
         })
 
 
-def _fecha_de_consulta(texto):
+def _fecha_de_consulta(texto, campo='fecha'):
     if not texto:
         return timezone.localdate()
     try:
         return date.fromisoformat(texto)
     except ValueError:
-        raise ValidationError({'fecha': 'Use el formato AAAA-MM-DD.'})
+        raise ValidationError({campo: 'Use el formato AAAA-MM-DD.'})
 
 
 class TurnosView(APIView):
-    """Turnos de planta interna por fecha. Se reemplazan completos al guardar."""
+    """Horarios de planta interna. GET por fecha o rango; POST programa varios técnicos y días."""
     permission_classes = [PuedeAsignar]
 
     def get(self, request):
-        fecha = _fecha_de_consulta(request.query_params.get('fecha'))
-        turnos = (TurnoEvaluador.objects.filter(fecha=fecha)
+        parametros = request.query_params
+        if parametros.get('desde') or parametros.get('hasta'):
+            desde = _fecha_de_consulta(parametros.get('desde'), 'desde')
+            hasta = _fecha_de_consulta(parametros.get('hasta') or parametros.get('desde'), 'hasta')
+        else:
+            desde = hasta = _fecha_de_consulta(parametros.get('fecha'))
+        if (hasta - desde).days >= MAX_DIAS_PROGRAMACION:
+            raise ValidationError({'hasta': f'Consulte como máximo {MAX_DIAS_PROGRAMACION} días.'})
+        turnos = (TurnoEvaluador.objects.filter(fecha__range=(desde, hasta))
                   .select_related('evaluador')
-                  .order_by('turno', 'evaluador__expediente'))
+                  .order_by('fecha', 'hora_inicio', 'evaluador__expediente'))
         return Response(TurnoEvaluadorSerializer(turnos, many=True).data)
 
     def post(self, request):
-        serializer = GuardarTurnosSerializer(data=request.data)
+        serializer = ProgramarTurnosSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        fecha = serializer.validated_data['fecha']
-        with transaction.atomic():
-            TurnoEvaluador.objects.filter(fecha=fecha).delete()
-            TurnoEvaluador.objects.bulk_create([
-                TurnoEvaluador(fecha=fecha, turno=item['turno'], evaluador=item['evaluador'])
-                for item in serializer.validated_data['asignaciones']
-            ])
-        turnos = (TurnoEvaluador.objects.filter(fecha=fecha)
-                  .select_related('evaluador')
-                  .order_by('turno', 'evaluador__expediente'))
-        return Response(TurnoEvaluadorSerializer(turnos, many=True).data)
+        datos = serializer.validated_data
+        resultado = programar_turnos(datos['evaluadores'], datos['desde'], datos['hasta'],
+                                     datos['horarios'])
+        return Response(resultado)
 
 
 class RepartoTurnosView(APIView):

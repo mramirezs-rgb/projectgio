@@ -22,6 +22,8 @@ export const COLUMNAS_KANBAN = [
   { id: ESTATUS.LIQUIDADO, titulo: 'Liquidado', color: '#10b981' },
 ]
 
+const FOLIOS_POR_COLUMNA = 50
+
 export const TRANSICIONES = {
   [ESTATUS.PENDIENTE]: [ESTATUS.ASIGNADO, ESTATUS.EN_PROCESO],
   [ESTATUS.ASIGNADO]: [ESTATUS.EN_PROCESO, ESTATUS.PENDIENTE],
@@ -67,7 +69,12 @@ export function useIncidentes() {
     ordering: '-fecha_apertura',
   })
 
-  const paginacion = reactive({ pagina: 1, tamano: 50, total: 0 })
+  // La tabla pagina toda la lista (20 por página). El kanban pagina cada columna por separado:
+  // si compartiera la página de la tabla, un folio antiguo que cambia de estatus quedaría fuera
+  // de la columna aunque las métricas sí lo cuenten.
+  const modo = ref('kanban')
+  const paginacion = reactive({ pagina: 1, tamano: 20, total: 0 })
+  const kanban = reactive({})
 
   const totalPaginas = computed(() =>
     Math.max(1, Math.ceil((paginacion.total || 0) / paginacion.tamano)),
@@ -146,13 +153,49 @@ export function useIncidentes() {
     }
   }
 
+  const cargarColumna = async (estatus, pagina) => {
+    const { data } = await getIncidentes({
+      ...parametros(),
+      estatus,
+      page: pagina,
+      page_size: FOLIOS_POR_COLUMNA,
+    })
+    const lista = Array.isArray(data) ? data : data.results || []
+    return { lista, total: Array.isArray(data) ? lista.length : data.count || 0 }
+  }
+
+  const cargarKanban = async () => {
+    const estatus = filtros.estatus ? [filtros.estatus] : COLUMNAS_KANBAN.map((c) => c.id)
+    const columnas = await Promise.all(estatus.map((valor) => cargarColumna(valor, 1)))
+    for (const clave of Object.keys(kanban)) delete kanban[clave]
+    estatus.forEach((valor, indice) => {
+      kanban[valor] = { pagina: 1, total: columnas[indice].total }
+    })
+    incidentes.value = columnas.flatMap((columna) => columna.lista)
+    paginacion.total = columnas.reduce((suma, columna) => suma + columna.total, 0)
+  }
+
+  const cargarMasColumna = async (estatus) => {
+    const estado = kanban[estatus]
+    if (!estado) return
+    const { lista, total } = await cargarColumna(estatus, estado.pagina + 1)
+    const vistos = new Set(incidentes.value.map((item) => item.id))
+    incidentes.value = [...incidentes.value, ...lista.filter((item) => !vistos.has(item.id))]
+    estado.pagina += 1
+    estado.total = total
+  }
+
   const cargarIncidentes = async ({ conMetricas = true } = {}) => {
     cargando.value = true
     error.value = null
     try {
-      const { data } = await getIncidentes(parametros())
-      incidentes.value = Array.isArray(data) ? data : data.results || []
-      paginacion.total = Array.isArray(data) ? incidentes.value.length : data.count || 0
+      if (modo.value === 'kanban') {
+        await cargarKanban()
+      } else {
+        const { data } = await getIncidentes(parametros())
+        incidentes.value = Array.isArray(data) ? data : data.results || []
+        paginacion.total = Array.isArray(data) ? incidentes.value.length : data.count || 0
+      }
       if (conMetricas) await cargarMetricas()
     } catch (problema) {
       incidentes.value = []
@@ -203,14 +246,20 @@ export function useIncidentes() {
   const reemplazarIncidente = (actualizado) => {
     const indice = incidentes.value.findIndex((item) => item.id === actualizado.id)
     if (indice === -1) return
+    const anterior = incidentes.value[indice].estatus
+    if (actualizado.estatus && actualizado.estatus !== anterior) {
+      if (kanban[anterior]) kanban[anterior].total = Math.max(0, kanban[anterior].total - 1)
+      if (kanban[actualizado.estatus]) kanban[actualizado.estatus].total += 1
+    }
     incidentes.value.splice(indice, 1, { ...incidentes.value[indice], ...actualizado })
   }
 
   const columnasKanban = computed(() =>
-    COLUMNAS_KANBAN.map((columna) => ({
-      ...columna,
-      items: incidentes.value.filter((item) => item.estatus === columna.id),
-    })),
+    COLUMNAS_KANBAN.map((columna) => {
+      const items = incidentes.value.filter((item) => item.estatus === columna.id)
+      const total = Math.max(kanban[columna.id]?.total ?? 0, items.length)
+      return { ...columna, items, total, hayMas: items.length < total }
+    }),
   )
 
   const kpis = computed(() => {
@@ -243,6 +292,7 @@ export function useIncidentes() {
     centralesZona,
     metricas,
     filtros,
+    modo,
     paginacion,
     totalPaginas,
     columnasKanban,
@@ -250,6 +300,7 @@ export function useIncidentes() {
     cargarCatalogos,
     actualizarZona,
     cargarIncidentes,
+    cargarMasColumna,
     cargarMetricas,
     aplicarFiltros,
     aplicarFiltrosConRetardo,

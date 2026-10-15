@@ -86,10 +86,12 @@ const salir = async () => {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.75rem 1.25rem;
-  padding: 0.6rem 1rem;
+  gap: 12px 20px;
+  min-height: 64px;
+  padding: 8px 24px;
   background-color: var(--barra);
-  border-bottom: 1px solid var(--borde);
+  color: var(--sobre-barra);
+  border-bottom: 1px solid var(--barra-borde);
   position: sticky;
   top: 0;
   z-index: 40;
@@ -98,7 +100,7 @@ const salir = async () => {
 .barra__marca {
   display: flex;
   align-items: center;
-  gap: 0.6rem;
+  gap: 12px;
   min-width: 0;
 }
 
@@ -107,10 +109,10 @@ const salir = async () => {
   place-items: center;
   width: 36px;
   height: 36px;
-  border-radius: 9px;
-  background: linear-gradient(140deg, #2563eb, #38bdf8);
-  color: #fff;
-  font-weight: 800;
+  border-radius: var(--radio-pildora);
+  background: var(--acento);
+  color: var(--sobre-acento);
+  font-weight: 700;
   font-size: 0.8rem;
   letter-spacing: 0.04em;
   flex-shrink: 0;
@@ -129,38 +131,40 @@ const salir = async () => {
 }
 .barra__titulos small {
   font-size: 0.7rem;
-  color: var(--apagado);
+  color: var(--sobre-barra-apagado);
 }
 
 .barra__nav {
   display: flex;
-  gap: 0.25rem;
+  gap: 4px;
   flex: 1 1 auto;
   overflow-x: auto;
 }
 
 .barra__enlace {
-  padding: 0.45rem 0.85rem;
-  border-radius: 8px;
-  color: var(--apagado);
+  padding: 12px;
+  border-radius: 0;
+  color: var(--sobre-barra-apagado);
   text-decoration: none;
-  font-size: 0.8125rem;
-  font-weight: 600;
+  font-size: 0.875rem;
+  font-weight: 400;
+  letter-spacing: 0.3px;
   white-space: nowrap;
 }
 .barra__enlace:hover {
-  background-color: var(--panel-alto);
-  color: var(--texto);
+  color: var(--sobre-barra);
+  text-decoration: none;
 }
 .barra__enlace--activo {
-  background-color: rgb(37 99 235 / 0.18);
-  color: var(--acento-claro);
+  color: var(--sobre-barra);
+  font-weight: 700;
+  box-shadow: inset 0 -2px 0 var(--acento);
 }
 
 .barra__usuario {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  gap: 12px;
 }
 
 .barra__identidad {
@@ -171,26 +175,26 @@ const salir = async () => {
 }
 .barra__nombre {
   font-size: 0.8125rem;
-  font-weight: 600;
+  font-weight: 700;
 }
 .barra__rol {
   font-size: 0.6875rem;
-  color: var(--acento-claro);
+  color: var(--sobre-barra-apagado);
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
 
 .tema-flotante {
   position: fixed;
-  top: 0.75rem;
-  right: 0.75rem;
+  top: 12px;
+  right: 12px;
   z-index: 40;
   background-color: var(--panel);
 }
 
 .contenido {
   flex: 1;
-  padding: 1rem;
+  padding: 16px 24px 24px;
   max-width: 1600px;
   width: 100%;
   margin: 0 auto;
@@ -203,7 +207,7 @@ const salir = async () => {
 
 @media (max-width: 700px) {
   .barra {
-    padding: 0.5rem 0.75rem;
+    padding: 8px 12px;
   }
   .barra__titulos strong {
     font-size: 0.78rem;
@@ -212,7 +216,7 @@ const salir = async () => {
     display: none;
   }
   .contenido {
-    padding: 0.75rem;
+    padding: 12px;
   }
 }
 </style>

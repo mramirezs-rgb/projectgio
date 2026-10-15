@@ -241,31 +241,57 @@ class TurnoEvaluadorSerializer(serializers.ModelSerializer):
     evaluador_nombre = serializers.CharField(source='evaluador.nombre_completo', read_only=True)
     evaluador_expediente = serializers.CharField(source='evaluador.expediente', read_only=True)
     area_operativa = serializers.CharField(source='evaluador.area_operativa', read_only=True)
-    turno_display = serializers.CharField(source='get_turno_display', read_only=True)
+    hora_inicio = serializers.TimeField(format='%H:%M')
+    hora_fin = serializers.TimeField(format='%H:%M')
+    cruza_medianoche = serializers.BooleanField(read_only=True)
 
     class Meta:
         model = TurnoEvaluador
-        fields = ['id', 'fecha', 'turno', 'turno_display', 'evaluador', 'evaluador_nombre',
-                  'evaluador_expediente', 'area_operativa']
+        fields = ['id', 'fecha', 'hora_inicio', 'hora_fin', 'cruza_medianoche', 'evaluador',
+                  'evaluador_nombre', 'evaluador_expediente', 'area_operativa']
 
 
-class AsignacionTurnoSerializer(serializers.Serializer):
-    evaluador = serializers.PrimaryKeyRelatedField(
+MAX_DIAS_PROGRAMACION = 62
+
+
+class HorarioDiaSerializer(serializers.Serializer):
+    """Un día de la semana en la programación: horario o descanso."""
+    hora_inicio = serializers.TimeField(required=False)
+    hora_fin = serializers.TimeField(required=False)
+    descanso = serializers.BooleanField(required=False, default=False)
+
+    def validate(self, datos):
+        if datos.get('descanso'):
+            return {'descanso': True}
+        inicio, fin = datos.get('hora_inicio'), datos.get('hora_fin')
+        if inicio is None or fin is None:
+            raise serializers.ValidationError('Indique hora de inicio y de fin, o marque descanso.')
+        if inicio == fin:
+            raise serializers.ValidationError('La hora de inicio y la de fin no pueden ser iguales.')
+        return {'hora_inicio': inicio, 'hora_fin': fin}
+
+
+class ProgramarTurnosSerializer(serializers.Serializer):
+    evaluadores = serializers.PrimaryKeyRelatedField(
         queryset=UsuarioGIO.objects.filter(rol=UsuarioGIO.Rol.PI_EVALUADOR, is_active=True),
+        many=True, allow_empty=False,
     )
-    turno = serializers.ChoiceField(choices=TurnoEvaluador.Turno.choices)
+    desde = serializers.DateField()
+    hasta = serializers.DateField()
+    # De lunes a domingo; null deja ese día sin cambios.
+    horarios = serializers.ListField(
+        child=HorarioDiaSerializer(allow_null=True), min_length=7, max_length=7,
+    )
 
-
-class GuardarTurnosSerializer(serializers.Serializer):
-    fecha = serializers.DateField()
-    asignaciones = AsignacionTurnoSerializer(many=True, allow_empty=True)
-
-    def validate_asignaciones(self, valor):
-        evaluadores = [item['evaluador'].pk for item in valor]
-        repetidos = {pk for pk in evaluadores if evaluadores.count(pk) > 1}
-        if repetidos:
-            raise serializers.ValidationError('Un técnico no puede tener dos turnos el mismo día.')
-        return valor
+    def validate(self, datos):
+        if datos['hasta'] < datos['desde']:
+            raise serializers.ValidationError({'hasta': 'La fecha final es anterior a la inicial.'})
+        if (datos['hasta'] - datos['desde']).days >= MAX_DIAS_PROGRAMACION:
+            raise serializers.ValidationError(
+                {'hasta': f'Programe como máximo {MAX_DIAS_PROGRAMACION} días a la vez.'})
+        if all(horario is None for horario in datos['horarios']):
+            raise serializers.ValidationError({'horarios': 'No hay ningún día por modificar.'})
+        return datos
 
 
 class RepartoTurnosSerializer(serializers.Serializer):
