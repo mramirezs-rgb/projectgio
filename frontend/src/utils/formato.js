@@ -27,8 +27,13 @@ export const formatearBytes = (bytes) => {
   return `${(valor / (1024 * 1024)).toFixed(2)} MB`
 }
 
+// Excel ejecuta como fórmula un texto que empieza con estos caracteres; se neutraliza con un
+// apóstrofo. Los números negativos no se tocan porque llegan como número, no como texto.
+const INICIO_DE_FORMULA = /^[=+\-@\t\r]/
+
 const ESCAPAR_CSV = (valor) => {
-  const texto = valor === null || valor === undefined ? '' : String(valor)
+  let texto = valor === null || valor === undefined ? '' : String(valor)
+  if (typeof valor === 'string' && INICIO_DE_FORMULA.test(texto)) texto = `'${texto}`
   return `"${texto.replace(/"/g, '""')}"`
 }
 
@@ -36,7 +41,10 @@ export const descargarCSV = (nombreArchivo, cabeceras, filas) => {
   const lineas = [cabeceras.map(ESCAPAR_CSV).join(',')]
   for (const fila of filas) lineas.push(fila.map(ESCAPAR_CSV).join(','))
   const contenido = `﻿${lineas.join('\r\n')}`
-  const blob = new Blob([contenido], { type: 'text/csv;charset=utf-8' })
+  descargarArchivo(nombreArchivo, new Blob([contenido], { type: 'text/csv;charset=utf-8' }))
+}
+
+export const descargarArchivo = (nombreArchivo, blob) => {
   const url = URL.createObjectURL(blob)
   const enlace = document.createElement('a')
   enlace.href = url

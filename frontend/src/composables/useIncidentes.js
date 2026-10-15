@@ -88,6 +88,14 @@ export function useIncidentes() {
     return params
   }
 
+  // Mismos filtros, búsqueda y orden del tablero, sin paginar.
+  const parametrosDeExportacion = () => {
+    const params = parametros()
+    delete params.page
+    delete params.page_size
+    return params
+  }
+
   const cargarCatalogos = async () => {
     const [resTecnicos, resEvaluadores, resCentrales, resAreas] = await Promise.allSettled([
       getTecnicos(),
@@ -297,6 +305,7 @@ export function useIncidentes() {
     totalPaginas,
     columnasKanban,
     kpis,
+    parametrosDeExportacion,
     cargarCatalogos,
     actualizarZona,
     cargarIncidentes,

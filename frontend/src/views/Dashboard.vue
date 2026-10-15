@@ -9,6 +9,7 @@ import {
   asignarMasivo,
   cancelarLiquidacion,
   createIncidente,
+  exportarIncidentes,
   getIncidente,
   liquidarIncidente,
   mensajeDeError,
@@ -16,12 +17,13 @@ import {
 } from '../services/api.js'
 import {
   confirmarAccion,
+  elegirFormatoExportacion,
   mostrarAdvertencia,
   mostrarError,
   mostrarExito,
   notificar,
 } from '../utils/alerts.js'
-import { descargarCSV, formatearFecha, formatearHoras, marcaDeTiempo } from '../utils/formato.js'
+import { descargarArchivo, formatearHoras, marcaDeTiempo } from '../utils/formato.js'
 
 const { usuario, rol, permisos, esGerencia } = useAuth()
 const {
@@ -40,6 +42,7 @@ const {
   totalPaginas,
   columnasKanban,
   kpis,
+  parametrosDeExportacion,
   cargarCatalogos,
   actualizarZona,
   cargarIncidentes,
@@ -259,53 +262,29 @@ const asignarSeleccion = async () => {
   }
 }
 
-const exportar = () => {
-  if (incidentes.value.length === 0) {
-    mostrarAdvertencia('Sin datos', 'No hay folios en la vista actual para exportar.')
+const exportando = ref(false)
+
+const exportar = async () => {
+  const total = kpis.value.total ?? 0
+  if (total === 0) {
+    mostrarAdvertencia('Sin datos', 'No hay folios con los filtros actuales para exportar.')
     return
   }
-  descargarCSV(
-    `GIO_Incidencias_${marcaDeTiempo()}.csv`,
-    [
-      'Folio',
-      'Empresa',
-      'Referencia',
-      'Tipo de servicio',
-      'Area operativa',
-      'Central',
-      'Técnico de planta externa',
-      'Técnico (planta interna)',
-      'Estatus',
-      'Estado del enlace',
-      'Dilacion (dias)',
-      'Apertura',
-      'Cierre',
-      'MTTR (horas)',
-      'Evidencias',
-      'Direccion',
-      'IP',
-    ],
-    incidentes.value.map((inc) => [
-      inc.folio,
-      inc.empresa,
-      inc.referencia,
-      inc.tipo_servicio,
-      inc.area_operativa,
-      inc.central,
-      inc.tecnico_nombre,
-      inc.evaluador_nombre,
-      etiquetaEstatus(inc.estatus),
-      inc.estado_enlace,
-      inc.dilacion_dias ?? 0,
-      formatearFecha(inc.fecha_apertura),
-      formatearFecha(inc.fecha_cierre),
-      inc.mttr_horas ?? '',
-      inc.total_evidencias ?? 0,
-      inc.dir_pta_a,
-      inc.ips,
-    ]),
+  const formato = await elegirFormatoExportacion(
+    'Exportar reporte',
+    `Se exportarán ${total} folio(s) con los filtros, la búsqueda y el orden actuales.`,
   )
-  notificar('Reporte CSV descargado')
+  if (!formato) return
+  exportando.value = true
+  try {
+    const { data } = await exportarIncidentes({ ...parametrosDeExportacion(), formato })
+    descargarArchivo(`GIO_Incidencias_${marcaDeTiempo()}.${formato}`, data)
+    notificar('Reporte descargado')
+  } catch (error) {
+    mostrarError('No se pudo exportar', mensajeDeError(error))
+  } finally {
+    exportando.value = false
+  }
 }
 
 const ordenar = async (campo) => {
@@ -449,9 +428,10 @@ const ordenar = async (campo) => {
           v-if="permisos.exportar"
           type="button"
           class="gio-boton gio-boton--secundario"
+          :disabled="exportando"
           @click="exportar"
         >
-          Exportar CSV
+          {{ exportando ? 'Exportando…' : 'Exportar' }}
         </button>
         <button
           v-if="esGerencia"

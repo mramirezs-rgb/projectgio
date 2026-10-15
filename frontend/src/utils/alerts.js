@@ -52,6 +52,31 @@ export const confirmarAccion = async (titulo, mensaje, textoConfirmar = 'Sí, co
   return isConfirmed
 }
 
+// Devuelve 'xlsx', 'csv' o null si se cancela.
+export const elegirFormatoExportacion = async (titulo, mensaje) => {
+  const { isConfirmed, isDenied } = await GioSwal.fire({
+    icon: 'question',
+    title: titulo,
+    text: mensaje,
+    showCancelButton: true,
+    showDenyButton: true,
+    confirmButtonText: 'Excel (.xlsx)',
+    denyButtonText: 'CSV',
+    cancelButtonText: 'Cancelar',
+    customClass: {
+      popup: 'gio-swal',
+      title: 'gio-swal__title',
+      htmlContainer: 'gio-swal__texto',
+      confirmButton: 'gio-swal__btn gio-swal__btn--primario',
+      denyButton: 'gio-swal__btn gio-swal__btn--secundario',
+      cancelButton: 'gio-swal__btn gio-swal__btn--secundario',
+    },
+  })
+  if (isConfirmed) return 'xlsx'
+  if (isDenied) return 'csv'
+  return null
+}
+
 export const pedirTexto = async (titulo, etiqueta, valorInicial = '') => {
   const { isConfirmed, value } = await GioSwal.fire({
     title: titulo,
