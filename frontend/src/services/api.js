@@ -164,8 +164,8 @@ export const getCentrales = (params) => api.get('/centrales/', { params })
 export const getAreas = () => api.get('/areas/')
 export const getCatalogos = () => api.get('/catalogos/')
 
-export const getTurnos = (fecha) => api.get('/turnos/', { params: { fecha } })
-export const guardarTurnos = (datos) => api.post('/turnos/', datos)
+export const getTurnos = (params) => api.get('/turnos/', { params })
+export const programarTurnos = (datos) => api.post('/turnos/', datos)
 export const repartirTurnos = (datos) => api.post('/turnos/repartir/', datos)
 
 export const getUsuarios = (params) => api.get('/usuarios/', { params })

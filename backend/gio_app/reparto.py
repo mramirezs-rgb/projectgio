@@ -1,9 +1,40 @@
 from collections import Counter
+from datetime import timedelta
 
 from django.db import transaction
 from django.utils import timezone
 
 from .models import BitacoraIncidente, Incidente, TurnoEvaluador
+
+
+def programar_turnos(evaluadores, desde, hasta, horarios):
+    """Aplica un horario semanal a varios técnicos de planta interna en un rango de fechas.
+
+    `horarios` trae 7 entradas, de lunes a domingo. Cada una es:
+      - None: ese día no se modifica;
+      - {'descanso': True}: se elimina el turno de ese día;
+      - {'hora_inicio': ..., 'hora_fin': ...}: se crea o reemplaza el turno.
+    """
+    resultado = {'guardados': 0, 'eliminados': 0}
+    with transaction.atomic():
+        fecha = desde
+        while fecha <= hasta:
+            horario = horarios[fecha.weekday()]
+            if horario is not None:
+                if horario.get('descanso'):
+                    eliminados, _ = TurnoEvaluador.objects.filter(
+                        fecha=fecha, evaluador__in=evaluadores).delete()
+                    resultado['eliminados'] += eliminados
+                else:
+                    for evaluador in evaluadores:
+                        TurnoEvaluador.objects.update_or_create(
+                            fecha=fecha, evaluador=evaluador,
+                            defaults={'hora_inicio': horario['hora_inicio'],
+                                      'hora_fin': horario['hora_fin']},
+                        )
+                        resultado['guardados'] += 1
+            fecha += timedelta(days=1)
+    return resultado
 
 
 def evaluadores_de_turno(fecha):
