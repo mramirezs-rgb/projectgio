@@ -450,7 +450,7 @@ const nombreEvaluador = (expediente) =>
 .turnos__error {
   margin: 0;
   padding: 0.7rem 0.85rem;
-  border-radius: 8px;
+  border-radius: var(--radio);
   background: rgb(239 68 68 / 0.12);
   border: 1px solid rgb(239 68 68 / 0.4);
   color: var(--rojo-texto);
@@ -532,7 +532,7 @@ const nombreEvaluador = (expediente) =>
 
 .cuadricula td {
   padding: 0.35rem 0.4rem;
-  border-bottom: 1px solid rgb(36 51 82 / 0.5);
+  border-bottom: 1px solid var(--linea);
   vertical-align: middle;
 }
 
@@ -551,7 +551,7 @@ const nombreEvaluador = (expediente) =>
 }
 
 .cuadricula__hoy {
-  background-color: rgb(56 189 248 / 0.06);
+  background-color: var(--resalte);
 }
 
 .celda {
@@ -559,7 +559,7 @@ const nombreEvaluador = (expediente) =>
   min-width: 92px;
   padding: 0.4rem 0.3rem;
   border: 1px solid var(--borde);
-  border-radius: 6px;
+  border-radius: var(--radio-campo);
   background-color: var(--superficie);
   color: var(--texto);
   font-variant-numeric: tabular-nums;

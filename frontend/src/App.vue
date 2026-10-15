@@ -86,10 +86,12 @@ const salir = async () => {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.75rem 1.25rem;
-  padding: 0.6rem 1rem;
+  gap: 12px 20px;
+  min-height: 56px;
+  padding: 8px 16px;
   background-color: var(--barra);
-  border-bottom: 1px solid var(--borde);
+  color: var(--sobre-barra);
+  border-bottom: 1px solid var(--barra-borde);
   position: sticky;
   top: 0;
   z-index: 40;
@@ -98,7 +100,7 @@ const salir = async () => {
 .barra__marca {
   display: flex;
   align-items: center;
-  gap: 0.6rem;
+  gap: 12px;
   min-width: 0;
 }
 
@@ -107,9 +109,9 @@ const salir = async () => {
   place-items: center;
   width: 36px;
   height: 36px;
-  border-radius: 9px;
-  background: linear-gradient(140deg, #2563eb, #38bdf8);
-  color: #fff;
+  border-radius: var(--radio-campo);
+  background: var(--sobre-barra);
+  color: var(--barra);
   font-weight: 800;
   font-size: 0.8rem;
   letter-spacing: 0.04em;
@@ -129,38 +131,53 @@ const salir = async () => {
 }
 .barra__titulos small {
   font-size: 0.7rem;
-  color: var(--apagado);
+  color: var(--sobre-barra-apagado);
 }
 
 .barra__nav {
   display: flex;
-  gap: 0.25rem;
+  gap: 4px;
   flex: 1 1 auto;
   overflow-x: auto;
 }
 
 .barra__enlace {
-  padding: 0.45rem 0.85rem;
-  border-radius: 8px;
-  color: var(--apagado);
+  padding: 8px 12px;
+  border-radius: var(--radio-campo);
+  color: var(--sobre-barra-apagado);
   text-decoration: none;
   font-size: 0.8125rem;
   font-weight: 600;
   white-space: nowrap;
 }
 .barra__enlace:hover {
-  background-color: var(--panel-alto);
-  color: var(--texto);
+  background-color: rgb(255 255 255 / 0.08);
+  color: var(--sobre-barra);
+  text-decoration: none;
 }
 .barra__enlace--activo {
-  background-color: rgb(37 99 235 / 0.18);
-  color: var(--acento-claro);
+  color: var(--sobre-barra);
+  box-shadow: inset 0 -2px 0 var(--sobre-barra);
+  border-radius: 0;
+}
+
+/* Los botones secundarios se invierten sobre la barra oscura. */
+.barra :deep(.gio-boton--secundario) {
+  background-color: transparent;
+  border-color: rgb(255 255 255 / 0.35);
+  color: var(--sobre-barra);
+}
+.barra :deep(.gio-boton--secundario:hover:not(:disabled)) {
+  background-color: rgb(255 255 255 / 0.1);
+}
+.barra :deep(:focus-visible) {
+  outline-color: var(--sobre-barra);
 }
 
 .barra__usuario {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  gap: 12px;
 }
 
 .barra__identidad {
@@ -175,22 +192,22 @@ const salir = async () => {
 }
 .barra__rol {
   font-size: 0.6875rem;
-  color: var(--acento-claro);
+  color: var(--sobre-barra-apagado);
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
 
 .tema-flotante {
   position: fixed;
-  top: 0.75rem;
-  right: 0.75rem;
+  top: 12px;
+  right: 12px;
   z-index: 40;
   background-color: var(--panel);
 }
 
 .contenido {
   flex: 1;
-  padding: 1rem;
+  padding: 16px 24px 24px;
   max-width: 1600px;
   width: 100%;
   margin: 0 auto;
@@ -203,7 +220,7 @@ const salir = async () => {
 
 @media (max-width: 700px) {
   .barra {
-    padding: 0.5rem 0.75rem;
+    padding: 8px 12px;
   }
   .barra__titulos strong {
     font-size: 0.78rem;
@@ -212,7 +229,7 @@ const salir = async () => {
     display: none;
   }
   .contenido {
-    padding: 0.75rem;
+    padding: 12px;
   }
 }
 </style>

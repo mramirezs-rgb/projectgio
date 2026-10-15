@@ -90,17 +90,14 @@ const enviar = async () => {
   min-height: 100vh;
   display: grid;
   place-items: center;
-  padding: 1.25rem;
-  background:
-    radial-gradient(circle at 15% 15%, rgb(37 99 235 / 0.18), transparent 45%),
-    radial-gradient(circle at 85% 80%, rgb(56 189 248 / 0.12), transparent 40%),
-    var(--fondo);
+  padding: 20px;
+  background-color: var(--fondo);
 }
 
 .acceso__tarjeta {
   width: 100%;
   max-width: 400px;
-  padding: 1.75rem;
+  padding: 32px;
 }
 
 .acceso__cabecera {
@@ -114,15 +111,15 @@ const enviar = async () => {
   width: 54px;
   height: 54px;
   margin: 0 auto 0.85rem;
-  border-radius: 14px;
-  background: linear-gradient(140deg, #2563eb, #38bdf8);
-  color: #fff;
+  border-radius: var(--radio);
+  background: var(--barra);
+  color: var(--sobre-barra);
   font-weight: 800;
   letter-spacing: 0.05em;
 }
 
 .acceso__cabecera h1 {
-  font-size: 1.35rem;
+  font-size: 1.5rem;
 }
 
 .acceso__cabecera p {
@@ -141,7 +138,7 @@ const enviar = async () => {
 .acceso__error {
   margin: 0;
   padding: 0.6rem 0.75rem;
-  border-radius: 8px;
+  border-radius: var(--radio);
   font-size: 0.8125rem;
   white-space: pre-line;
 }

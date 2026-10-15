@@ -183,7 +183,7 @@ const dilacion = (valor) => (valor === null || valor === undefined ? '—' : `${
 .desempeno__error {
   margin: 0;
   padding: 0.7rem 0.85rem;
-  border-radius: 8px;
+  border-radius: var(--radio);
   background: rgb(239 68 68 / 0.12);
   border: 1px solid rgb(239 68 68 / 0.4);
   color: var(--rojo-texto);
@@ -230,6 +230,6 @@ const dilacion = (valor) => (valor === null || valor === undefined ? '—' : `${
 
 .listado td {
   padding: 0.5rem 0.6rem;
-  border-bottom: 1px solid rgb(36 51 82 / 0.5);
+  border-bottom: 1px solid var(--linea);
 }
 </style>

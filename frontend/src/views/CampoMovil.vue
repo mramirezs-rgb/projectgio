@@ -412,7 +412,7 @@ const mapa = (direccion) =>
 .campo__error {
   margin: 0;
   padding: 0.7rem 0.85rem;
-  border-radius: 8px;
+  border-radius: var(--radio);
   background: rgb(239 68 68 / 0.12);
   border: 1px solid rgb(239 68 68 / 0.4);
   color: var(--rojo-texto);
@@ -428,7 +428,7 @@ const mapa = (direccion) =>
 .resumen {
   background-color: var(--panel);
   border: 1px solid var(--borde);
-  border-radius: 10px;
+  border-radius: var(--radio);
   padding: 0.7rem 0.5rem;
   display: flex;
   flex-direction: column;
@@ -453,7 +453,7 @@ const mapa = (direccion) =>
 
 .resumen--activo {
   border-color: var(--acento-claro);
-  background-color: rgb(56 189 248 / 0.1);
+  background-color: var(--seleccion);
 }
 
 .resumen--critico strong {
@@ -604,7 +604,7 @@ const mapa = (direccion) =>
   color: var(--apagado);
   background-color: var(--campo);
   border: 1px solid var(--borde);
-  border-radius: 8px;
+  border-radius: var(--radio);
   padding: 0.65rem 0.75rem;
   white-space: pre-line;
 }

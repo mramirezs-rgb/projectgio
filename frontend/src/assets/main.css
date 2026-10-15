@@ -1,34 +1,60 @@
 @import 'tailwindcss';
 
 @theme {
-  --color-gio-fondo: #0b1120;
-  --color-gio-panel: #101a2e;
-  --color-gio-panel-alto: #16233d;
-  --color-gio-borde: #243352;
-  --color-gio-texto: #e8eefc;
-  --color-gio-apagado: #93a4c4;
-  --color-gio-acento: #2563eb;
-  --color-gio-acento-claro: #38bdf8;
-  --color-gio-ok: #10b981;
-  --color-gio-alerta: #f59e0b;
-  --color-gio-peligro: #ef4444;
+  --color-gio-fondo: var(--fondo);
+  --color-gio-panel: var(--panel);
+  --color-gio-panel-alto: var(--panel-alto);
+  --color-gio-borde: var(--borde);
+  --color-gio-texto: var(--texto);
+  --color-gio-apagado: var(--apagado);
+  --color-gio-acento: var(--acento);
+  --color-gio-acento-claro: var(--acento-claro);
+  --color-gio-ok: var(--ok);
+  --color-gio-alerta: var(--alerta);
+  --color-gio-peligro: var(--peligro);
 }
 
-/* Tema oscuro (por omisión). El tema se elige con data-theme en <html>; ver useTema.js. */
+/*
+ * Tema estiloatlassian (docs/estilos/estiloatlassian.md): plano, casi monocromático, un solo
+ * acento, rejilla de 4 px y movimiento rápido. El tema se elige con data-theme en <html>
+ * (ver useTema.js). El oscuro es el de omisión y es una derivación propia del estilo, que
+ * solo define el claro.
+ */
 :root {
-  --fondo: #0b1120;
-  --panel: #101a2e;
-  --panel-alto: #16233d;
-  --superficie: #0a1222;
-  --campo: #0b1324;
-  --barra: #060c18;
-  --borde: #243352;
-  --texto: #e8eefc;
-  --texto-suave: #cbd5e1;
-  --apagado: #93a4c4;
-  --tenue: #64748b;
-  --acento: #2563eb;
-  --acento-claro: #38bdf8;
+  /* Superficies */
+  --fondo: #161718;
+  --panel: #1f1f21;
+  --panel-alto: #2b2c2f;
+  --superficie: #1a1b1d;
+  --campo: #242528;
+  --seleccion: #1c2b42;
+  --resalte: rgb(133 184 255 / 0.1);
+  --velo: rgb(8 9 10 / 0.72);
+
+  /* Barra superior: casi negra en ambos temas */
+  --barra: #101214;
+  --sobre-barra: #ffffff;
+  --sobre-barra-apagado: rgb(255 255 255 / 0.72);
+  --barra-borde: rgb(255 255 255 / 0.12);
+
+  /* Bordes */
+  --borde: #37383c;
+  --borde-campo: #7e8188;
+  --linea: #2e2f33;
+
+  /* Texto */
+  --texto: #dfe1e4;
+  --texto-suave: #cecfd2;
+  --apagado: #a9abaf;
+  --tenue: #8c8f97;
+
+  /* Acento único */
+  --acento: #85b8ff;
+  --acento-hover: #a9ccff;
+  --sobre-acento: #101214;
+  --acento-claro: #85b8ff;
+
+  /* Estados (siempre acompañados de texto o ícono) */
   --ok: #10b981;
   --alerta: #f59e0b;
   --peligro: #ef4444;
@@ -42,25 +68,49 @@
   --naranja-texto: #fdba74;
   --azul-texto: #93c5fd;
   --indigo-texto: #a5b4fc;
-  --scroll: #2b3b5e;
-  --scroll-hover: #3a4e78;
-  --radio: 10px;
+  --peligro-borde: #7f1d1d;
+
+  --scroll: #3d3f43;
+  --scroll-hover: #55575d;
+
+  /* Radios */
+  --radio-sm: 3px;
+  --radio-campo: 4px;
+  --radio: 8px;
+  --radio-pildora: 9999px;
+
+  /* Movimiento */
+  --curva: cubic-bezier(0.4, 0, 0, 1);
+  --rapido: 75ms;
+  --medio: 400ms;
+
   color-scheme: dark;
 }
 
 :root[data-theme='light'] {
-  --fondo: #f1f5f9;
+  --fondo: #f8f8f8;
   --panel: #ffffff;
-  --panel-alto: #e8eef6;
-  --superficie: #f8fafc;
+  --panel-alto: #f0f1f2;
+  --superficie: #f8f8f8;
   --campo: #ffffff;
-  --barra: #ffffff;
-  --borde: #d3dce8;
-  --texto: #0f172a;
-  --texto-suave: #334155;
-  --apagado: #475569;
-  --tenue: #64748b;
-  --acento-claro: #0369a1;
+  --seleccion: #cfe1fd;
+  --resalte: rgb(28 43 66 / 0.06);
+  --velo: rgb(16 18 20 / 0.55);
+
+  --borde: #dcdfe4;
+  --borde-campo: #8c8f97;
+  --linea: #e9eaed;
+
+  --texto: #292a2e;
+  --texto-suave: #292a2e;
+  --apagado: #5e6066;
+  --tenue: #5e6066;
+
+  --acento: #1c2b42;
+  --acento-hover: #2c4060;
+  --sobre-acento: #ffffff;
+  --acento-claro: #1c2b42;
+
   --verde-texto: #047857;
   --verde-vivo: #059669;
   --rojo-texto: #b91c1c;
@@ -71,8 +121,11 @@
   --naranja-texto: #c2410c;
   --azul-texto: #1d4ed8;
   --indigo-texto: #4338ca;
-  --scroll: #cbd5e1;
-  --scroll-hover: #94a3b8;
+  --peligro-borde: #f0a3a3;
+
+  --scroll: #c1c4ca;
+  --scroll-hover: #8c8f97;
+
   color-scheme: light;
 }
 
@@ -98,7 +151,7 @@ body {
   font-family:
     system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   font-size: 15px;
-  line-height: 1.45;
+  line-height: 1.5;
   -webkit-text-size-adjust: 100%;
 }
 
@@ -109,6 +162,13 @@ h4 {
   margin: 0;
   font-weight: 700;
   line-height: 1.2;
+}
+
+a {
+  color: var(--acento-claro);
+}
+a:hover {
+  text-decoration: underline;
 }
 
 button {
@@ -127,24 +187,38 @@ textarea {
   font: inherit;
   color: var(--texto);
   background-color: var(--campo);
-  border: 1px solid var(--borde);
-  border-radius: 8px;
-  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--borde-campo);
+  border-radius: var(--radio-campo);
+  padding: 8px 12px;
   width: 100%;
   min-width: 0;
   outline: none;
-  transition:
-    border-color 0.15s ease,
-    box-shadow 0.15s ease;
+  transition: border-color var(--rapido) var(--curva);
+}
+
+input:hover:not(:disabled),
+select:hover:not(:disabled),
+textarea:hover:not(:disabled) {
+  border-color: var(--apagado);
+}
+
+input[type='checkbox'],
+input[type='radio'] {
+  width: auto;
+  accent-color: var(--acento);
+}
+
+/* Foco de teclado: contorno sólido de 2 px en el acento con 2 px de separación. */
+:focus-visible {
+  outline: 2px solid var(--acento-claro);
+  outline-offset: 2px;
 }
 
 input:focus-visible,
 select:focus-visible,
-textarea:focus-visible,
-button:focus-visible,
-a:focus-visible {
+textarea:focus-visible {
   border-color: var(--acento-claro);
-  box-shadow: 0 0 0 3px rgb(56 189 248 / 0.25);
+  outline-offset: 0;
 }
 
 textarea {
@@ -160,7 +234,7 @@ textarea {
 }
 ::-webkit-scrollbar-thumb {
   background: var(--scroll);
-  border-radius: 8px;
+  border-radius: var(--radio-pildora);
 }
 ::-webkit-scrollbar-thumb:hover {
   background: var(--scroll-hover);
@@ -170,34 +244,32 @@ textarea {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 0.4rem;
-  padding: 0.55rem 1rem;
+  gap: 8px;
+  min-height: 36px;
+  padding: 8px 16px;
   border: 1px solid transparent;
-  border-radius: 8px;
+  border-radius: var(--radio-pildora);
   font-weight: 600;
   font-size: 0.875rem;
+  line-height: 1.2;
   white-space: nowrap;
   transition:
-    background-color 0.15s ease,
-    border-color 0.15s ease,
-    transform 0.08s ease;
-}
-
-.gio-boton:active:not(:disabled) {
-  transform: translateY(1px);
+    background-color var(--rapido) var(--curva),
+    border-color var(--rapido) var(--curva),
+    color var(--rapido) var(--curva);
 }
 
 .gio-boton--primario {
   background-color: var(--acento);
-  color: #fff;
+  color: var(--sobre-acento);
 }
 .gio-boton--primario:hover:not(:disabled) {
-  background-color: #1d4ed8;
+  background-color: var(--acento-hover);
 }
 
 .gio-boton--secundario {
-  background-color: transparent;
-  border-color: var(--borde);
+  background-color: var(--panel);
+  border-color: var(--borde-campo);
   color: var(--texto);
 }
 .gio-boton--secundario:hover:not(:disabled) {
@@ -214,18 +286,18 @@ textarea {
 
 .gio-boton--peligro {
   background-color: transparent;
-  border-color: #7f1d1d;
+  border-color: var(--peligro-borde);
   color: var(--rojo-texto);
 }
 .gio-boton--peligro:hover:not(:disabled) {
-  background-color: rgb(239 68 68 / 0.12);
+  background-color: rgb(239 68 68 / 0.1);
 }
 
+/* Botones de la vista móvil: área táctil amplia. */
 .gio-boton--tactil {
   min-height: 56px;
-  padding: 0.9rem 1.2rem;
+  padding: 16px 20px;
   font-size: 1.0625rem;
-  border-radius: 12px;
   width: 100%;
 }
 
@@ -242,15 +314,15 @@ textarea {
   letter-spacing: 0.02em;
   text-transform: uppercase;
   color: var(--apagado);
-  margin-bottom: 0.3rem;
+  margin-bottom: 4px;
 }
 
 .gio-pastilla {
   display: inline-flex;
   align-items: center;
-  gap: 0.25rem;
-  padding: 0.15rem 0.5rem;
-  border-radius: 999px;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: var(--radio-sm);
   font-size: 0.6875rem;
   font-weight: 700;
   letter-spacing: 0.03em;
@@ -259,22 +331,22 @@ textarea {
 }
 
 .gio-pastilla--pendiente {
-  background: rgb(249 115 22 / 0.16);
+  background: rgb(249 115 22 / 0.14);
   color: var(--naranja-texto);
   border-color: rgb(249 115 22 / 0.4);
 }
 .gio-pastilla--asignado {
-  background: rgb(59 130 246 / 0.16);
+  background: rgb(59 130 246 / 0.14);
   color: var(--azul-texto);
   border-color: rgb(59 130 246 / 0.4);
 }
 .gio-pastilla--en_proceso {
-  background: rgb(234 179 8 / 0.16);
+  background: rgb(234 179 8 / 0.14);
   color: var(--amarillo-texto);
   border-color: rgb(234 179 8 / 0.4);
 }
 .gio-pastilla--liquidado {
-  background: rgb(16 185 129 / 0.16);
+  background: rgb(16 185 129 / 0.14);
   color: var(--verde-texto);
   border-color: rgb(16 185 129 / 0.4);
 }
@@ -282,7 +354,7 @@ textarea {
 .gio-semaforo {
   display: inline-flex;
   align-items: center;
-  gap: 0.35rem;
+  gap: 4px;
   font-size: 0.75rem;
   font-weight: 700;
 }
@@ -290,7 +362,7 @@ textarea {
   content: '';
   width: 8px;
   height: 8px;
-  border-radius: 999px;
+  border-radius: var(--radio-pildora);
   background: currentColor;
 }
 .gio-semaforo--normal {
@@ -324,7 +396,7 @@ textarea {
 .gio-vacio {
   text-align: center;
   color: var(--tenue);
-  padding: 2rem 1rem;
+  padding: 32px 16px;
   font-size: 0.875rem;
 }
 
@@ -332,19 +404,19 @@ textarea {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 0.6rem;
-  padding: 2.5rem;
+  gap: 8px;
+  padding: 40px;
   color: var(--apagado);
   font-size: 0.875rem;
 }
 
 .gio-cargando::before {
   content: '';
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   border: 2px solid var(--borde);
   border-top-color: var(--acento-claro);
-  border-radius: 999px;
+  border-radius: var(--radio-pildora);
   animation: gio-girar 0.8s linear infinite;
 }
 
@@ -354,12 +426,38 @@ textarea {
   }
 }
 
+/* Avisos dentro de formularios y paneles. */
+.gio-aviso {
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: var(--radio);
+  font-size: 0.8125rem;
+  white-space: pre-line;
+  border: 1px solid transparent;
+}
+.gio-aviso--error {
+  background: rgb(239 68 68 / 0.1);
+  border-color: rgb(239 68 68 / 0.4);
+  color: var(--rojo-texto);
+}
+.gio-aviso--alerta {
+  background: rgb(245 158 11 / 0.1);
+  border-color: rgb(245 158 11 / 0.4);
+  color: var(--ambar-texto);
+}
+.gio-aviso--ok {
+  background: rgb(16 185 129 / 0.1);
+  border-color: rgb(16 185 129 / 0.35);
+  color: var(--verde-texto);
+}
+
 .gio-swal {
   border: 1px solid var(--borde) !important;
-  border-radius: 14px !important;
+  border-radius: var(--radio) !important;
+  box-shadow: none !important;
 }
 .gio-swal__title {
-  font-size: 1.15rem !important;
+  font-size: 1.125rem !important;
   color: var(--texto) !important;
 }
 .gio-swal__texto {
@@ -374,8 +472,8 @@ textarea {
   overflow: auto;
   background: var(--campo);
   border: 1px solid var(--borde);
-  border-radius: 8px;
-  padding: 0.6rem 0.75rem;
+  border-radius: var(--radio-campo);
+  padding: 8px 12px;
   font-size: 0.78rem;
   color: var(--texto-suave);
   margin: 0;
@@ -384,21 +482,22 @@ textarea {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 0.6rem 1.2rem;
-  margin: 0 0.3rem;
+  min-height: 36px;
+  padding: 8px 20px;
+  margin: 0 4px;
   border: 1px solid transparent;
-  border-radius: 8px;
+  border-radius: var(--radio-pildora);
   font-weight: 600;
   font-size: 0.875rem;
   cursor: pointer;
 }
 .gio-swal__btn--primario {
   background-color: var(--acento);
-  color: #fff;
+  color: var(--sobre-acento);
 }
 .gio-swal__btn--secundario {
-  background-color: transparent;
-  border-color: var(--borde);
+  background-color: var(--panel);
+  border-color: var(--borde-campo);
   color: var(--texto);
 }
 .gio-swal__btn--peligro {
@@ -408,7 +507,8 @@ textarea {
 .swal2-input,
 .swal2-textarea {
   background-color: var(--campo) !important;
-  border: 1px solid var(--borde) !important;
+  border: 1px solid var(--borde-campo) !important;
+  border-radius: var(--radio-campo) !important;
   color: var(--texto) !important;
   box-shadow: none !important;
 }
@@ -423,6 +523,7 @@ textarea {
   *::before,
   *::after {
     animation-duration: 0.01ms !important;
-    transition-duration: 0.01ms !important;
+    transition-duration: 0ms !important;
+    transition-timing-function: linear !important;
   }
 }

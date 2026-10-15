@@ -149,7 +149,7 @@ const soltar = (evento, idColumna) => {
 }
 
 .tablero__columna {
-  background-color: var(--panel);
+  background-color: var(--superficie);
   border: 1px solid var(--borde);
   border-radius: var(--radio);
   display: flex;
@@ -157,16 +157,16 @@ const soltar = (evento, idColumna) => {
   max-height: calc(100vh - 300px);
   min-height: 160px;
   transition:
-    border-color 0.15s ease,
-    background-color 0.15s ease;
+    border-color var(--rapido) var(--curva),
+    background-color var(--rapido) var(--curva);
 }
 
 .tablero__columna--destino {
-  border-color: rgb(56 189 248 / 0.45);
+  border-color: var(--borde-campo);
 }
 
 .tablero__columna--activa {
-  background-color: rgb(56 189 248 / 0.07);
+  background-color: var(--resalte);
   border-color: var(--acento-claro);
 }
 
@@ -210,10 +210,10 @@ const soltar = (evento, idColumna) => {
 }
 
 .ficha {
-  background-color: var(--superficie);
+  background-color: var(--panel);
   border: 1px solid var(--borde);
   border-left: 3px solid var(--borde);
-  border-radius: 8px;
+  border-radius: var(--radio);
   padding: 0.7rem;
   cursor: pointer;
   transition:

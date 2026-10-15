@@ -183,16 +183,16 @@ const alternarTodo = (evento) => {
 
 .tabla td {
   padding: 0.6rem 0.85rem;
-  border-bottom: 1px solid rgb(36 51 82 / 0.6);
+  border-bottom: 1px solid var(--linea);
   vertical-align: middle;
 }
 
 .tabla tbody tr:hover {
-  background-color: rgb(36 51 82 / 0.35);
+  background-color: var(--resalte);
 }
 
 .tabla__fila--marcada {
-  background-color: rgb(37 99 235 / 0.12);
+  background-color: var(--seleccion);
 }
 
 .tabla__casilla {

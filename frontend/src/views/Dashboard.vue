@@ -648,7 +648,7 @@ const ordenar = async (campo) => {
   display: flex;
   margin-left: auto;
   border: 1px solid var(--borde);
-  border-radius: 8px;
+  border-radius: var(--radio);
   overflow: hidden;
 }
 
@@ -663,7 +663,7 @@ const ordenar = async (campo) => {
 
 .conmutador__btn--activo {
   background-color: var(--acento);
-  color: #fff;
+  color: var(--sobre-acento);
 }
 
 .masiva {
@@ -672,7 +672,7 @@ const ordenar = async (campo) => {
   gap: 0.7rem;
   flex-wrap: wrap;
   padding: 0.7rem 0.9rem;
-  border-color: rgb(37 99 235 / 0.5);
+  border-color: var(--acento-claro);
   font-size: 0.8125rem;
 }
 

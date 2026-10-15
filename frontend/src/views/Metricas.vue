@@ -281,7 +281,7 @@ const exportarTecnico = () => {
 .metricas__error {
   margin: 0;
   padding: 0.7rem 0.85rem;
-  border-radius: 8px;
+  border-radius: var(--radio);
   background: rgb(239 68 68 / 0.12);
   border: 1px solid rgb(239 68 68 / 0.4);
   color: var(--rojo-texto);
@@ -380,7 +380,7 @@ const exportarTecnico = () => {
   display: block;
   height: 100%;
   border-radius: 999px;
-  transition: width 0.3s ease;
+  transition: width var(--medio) var(--curva);
 }
 
 .listado {
@@ -401,7 +401,7 @@ const exportarTecnico = () => {
 
 .listado td {
   padding: 0.5rem 0.6rem;
-  border-bottom: 1px solid rgb(36 51 82 / 0.5);
+  border-bottom: 1px solid var(--linea);
 }
 
 .listado__mono {

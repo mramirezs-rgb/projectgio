@@ -330,7 +330,7 @@ const alternarActivo = async (usuario) => {
 .usuarios__error {
   margin: 0;
   padding: 0.7rem 0.85rem;
-  border-radius: 8px;
+  border-radius: var(--radio);
   background: rgb(239 68 68 / 0.12);
   border: 1px solid rgb(239 68 68 / 0.4);
   color: var(--rojo-texto);
@@ -361,11 +361,11 @@ const alternarActivo = async (usuario) => {
 
 .listado td {
   padding: 0.55rem 0.8rem;
-  border-bottom: 1px solid rgb(36 51 82 / 0.5);
+  border-bottom: 1px solid var(--linea);
 }
 
 .listado tbody tr:hover {
-  background-color: rgb(36 51 82 / 0.3);
+  background-color: var(--resalte);
 }
 
 .inactivo {
@@ -397,8 +397,7 @@ const alternarActivo = async (usuario) => {
 .velo {
   position: fixed;
   inset: 0;
-  background-color: rgb(2 6 23 / 0.8);
-  backdrop-filter: blur(3px);
+  background-color: var(--velo);
   display: flex;
   align-items: center;
   justify-content: center;
