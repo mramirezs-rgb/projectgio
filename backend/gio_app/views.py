@@ -1,9 +1,11 @@
+import logging
 from datetime import date
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.db import transaction
 from django.db.models import Avg, Count, Q
+from django.http import HttpResponse
 from django.utils import timezone
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
@@ -14,9 +16,12 @@ from rest_framework.views import APIView
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters as drf_filters
 
-from usuarios.permissions import PuedeAsignar, PuedeCrearIncidente, PuedeEditarIncidente
+from usuarios.permissions import (
+    PuedeAsignar, PuedeCrearIncidente, PuedeEditarIncidente, PuedeExportar,
+)
 
 from .desempeno import desempeno_de_campo
+from .exportacion import MAX_FILAS, generar_csv, generar_xlsx, nombre_de_archivo
 from .filters import IncidenteFilter
 from .models import BitacoraIncidente, EvidenciaIncidente, Incidente, TurnoEvaluador
 from .reparto import programar_turnos, repartir_folios_del_dia
@@ -35,6 +40,13 @@ from .serializers import (
 )
 
 UsuarioGIO = get_user_model()
+log = logging.getLogger('gio.exportacion')
+
+FORMATOS_EXPORTACION = {
+    'xlsx': (generar_xlsx,
+             'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'),
+    'csv': (generar_csv, 'text/csv; charset=utf-8'),
+}
 
 CAMPOS_AUDITADOS = (
     'estatus', 'tecnico', 'evaluador', 'diagnostico_final', 'codigo_fallo',
@@ -316,6 +328,35 @@ class IncidenteViewSet(viewsets.ModelViewSet):
         agregados['umbral_critico_dias'] = critico
         agregados['generado_en'] = timezone.now()
         return Response(agregados)
+
+    @action(detail=False, methods=['get'], url_path='exportar', permission_classes=[PuedeExportar])
+    def exportar(self, request):
+        """Todos los folios que coinciden con los filtros del tablero, sin paginar.
+
+        Se usa `formato` (xlsx o csv) y no `format`, que DRF reserva para elegir el renderer.
+        """
+        formato = (request.query_params.get('formato') or 'xlsx').lower()
+        if formato not in FORMATOS_EXPORTACION:
+            raise ValidationError({'formato': 'Use xlsx o csv.'})
+
+        queryset = (self.filter_queryset(self.get_queryset())
+                    .prefetch_related(None)
+                    .annotate(num_evidencias=Count('evidencias', distinct=True)))
+        total = queryset.count()
+        if total > MAX_FILAS:
+            raise ValidationError({'detail': (
+                f'La consulta tiene {total} folios y el máximo por reporte es {MAX_FILAS}. '
+                'Acote los filtros (área, estatus o fechas) y vuelva a intentar.')})
+
+        generar, tipo = FORMATOS_EXPORTACION[formato]
+        contenido = generar(queryset.iterator(chunk_size=2000))
+        log.info('Reporte %s de %s folios descargado por %s', formato, total,
+                 request.user.expediente)
+
+        respuesta = HttpResponse(contenido, content_type=tipo)
+        respuesta['Content-Disposition'] = f'attachment; filename="{nombre_de_archivo(formato)}"'
+        respuesta['X-Total-Folios'] = str(total)
+        return respuesta
 
     @action(detail=False, methods=['get'], url_path='desempeno', permission_classes=[PuedeAsignar])
     def desempeno(self, request):

@@ -148,6 +148,24 @@ export const getMetricas = (params) => api.get('/incidentes/metricas/', { params
 export const getDesempeno = (params) => api.get('/incidentes/desempeno/', { params })
 export const asignarMasivo = (datos) => api.post('/incidentes/asignar-masivo/', datos)
 
+// El reporte llega como archivo; si el servidor responde con error, el cuerpo también llega como
+// Blob y se convierte a JSON para que mensajeDeError pueda leerlo.
+export const exportarIncidentes = async (params) => {
+  try {
+    return await api.get('/incidentes/exportar/', { params, responseType: 'blob', timeout: 120000 })
+  } catch (error) {
+    const datos = error?.response?.data
+    if (datos instanceof Blob) {
+      try {
+        error.response.data = JSON.parse(await datos.text())
+      } catch {
+        error.response.data = null
+      }
+    }
+    throw error
+  }
+}
+
 export const getEvidencias = (id) => api.get(`/incidentes/${id}/evidencias/`)
 export const subirEvidencia = (id, formData, onProgreso) =>
   api.post(`/incidentes/${id}/evidencias/`, formData, {

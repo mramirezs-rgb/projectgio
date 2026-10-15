@@ -15,6 +15,14 @@ class PuedeAsignar(BasePermission):
         return bool(request.user and request.user.is_authenticated and request.user.puede_asignar)
 
 
+class PuedeExportar(BasePermission):
+    message = 'Solo Subgerencia o Gerencia pueden exportar el reporte de folios.'
+
+    def has_permission(self, request, view):
+        return bool(request.user and request.user.is_authenticated
+                    and request.user.tiene_vision_global)
+
+
 class PuedeCrearIncidente(BasePermission):
     message = 'Los folios se crean por ingesta SISA o por Subgerencia/Gerencia.'
 

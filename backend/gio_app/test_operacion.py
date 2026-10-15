@@ -1,12 +1,15 @@
+import csv
 import io
 import tempfile
 from datetime import datetime, timedelta
 from pathlib import Path
+from unittest.mock import patch
 
 from django.core.management import call_command
 from django.test import override_settings
 from django.urls import reverse
 from django.utils import timezone
+from openpyxl import load_workbook
 from rest_framework import status
 
 from .models import BitacoraIncidente, Incidente, TurnoEvaluador
@@ -424,3 +427,87 @@ class OquPlantaInternaTests(BaseGIOTestCase):
         nuevo = UsuarioGIO.objects.get(first_name='JUDITH')
         self.assertEqual(nuevo.rol, UsuarioGIO.Rol.PI_EVALUADOR)
         self.assertTrue(nuevo.expediente.startswith('OQU-'))
+
+
+class ExportacionReporteTests(BaseGIOTestCase):
+    url = reverse('incidente-exportar')
+
+    def setUp(self):
+        super().setUp()
+        for numero in range(30):
+            Incidente.objects.create(folio=f'EXP-{numero:04d}', area_operativa='PUEBLA',
+                                     empresa=f'EMPRESA {numero}')
+
+    def filas_csv(self, respuesta):
+        texto = respuesta.content.decode('utf-8-sig')
+        return list(csv.reader(io.StringIO(texto)))
+
+    def hoja_xlsx(self, respuesta):
+        return load_workbook(io.BytesIO(respuesta.content)).active
+
+    def test_exporta_todos_los_folios_filtrados_sin_paginar(self):
+        self.autenticar(self.sub)
+        respuesta = self.client.get(self.url, {'formato': 'csv', 'area_operativa': 'PUEBLA',
+                                               'page_size': 20})
+        self.assertEqual(respuesta.status_code, status.HTTP_200_OK)
+        filas = self.filas_csv(respuesta)
+        folios = {fila[0] for fila in filas[1:]}
+        self.assertEqual(len(folios), 31)
+        self.assertIn(self.propio.folio, folios)
+        self.assertNotIn(self.ajeno.folio, folios)
+        self.assertEqual(respuesta['X-Total-Folios'], '31')
+
+    def test_excel_por_omision_con_encabezado_fechas_y_numeros(self):
+        liquidado('LIQ-EXP', self.tecnico, self.evaluador)
+        self.autenticar(self.admin)
+        respuesta = self.client.get(self.url, {'search': 'LIQ-EXP'})
+        self.assertEqual(respuesta.status_code, status.HTTP_200_OK)
+        self.assertIn('spreadsheetml', respuesta['Content-Type'])
+        self.assertIn('.xlsx', respuesta['Content-Disposition'])
+
+        hoja = self.hoja_xlsx(respuesta)
+        encabezados = [celda.value for celda in hoja[1]]
+        fila = dict(zip(encabezados, [celda.value for celda in hoja[2]]))
+        self.assertEqual(fila['Folio'], 'LIQ-EXP')
+        self.assertEqual(fila['Técnico de planta externa'], 'Luis Serrano')
+        self.assertIsInstance(fila['Apertura'], datetime)
+        self.assertAlmostEqual(fila['MTTR (horas)'], 3, places=1)
+        self.assertEqual(hoja.freeze_panes, 'A2')
+        self.assertTrue(hoja.auto_filter.ref)
+
+    def test_csv_neutraliza_textos_que_serian_formulas(self):
+        Incidente.objects.create(folio='EXP-FORMULA', area_operativa='PUEBLA',
+                                 empresa='=HYPERLINK("http://x","clic")')
+        self.autenticar(self.admin)
+        respuesta = self.client.get(self.url, {'formato': 'csv', 'search': 'EXP-FORMULA'})
+        filas = self.filas_csv(respuesta)
+        empresa = filas[1][filas[0].index('Empresa')]
+        self.assertEqual(empresa, '\'=HYPERLINK("http://x","clic")')
+
+    def test_excel_guarda_como_texto_lo_que_parece_formula(self):
+        Incidente.objects.create(folio='EXP-FORMULA', area_operativa='PUEBLA', empresa='=1+1')
+        self.autenticar(self.admin)
+        respuesta = self.client.get(self.url, {'search': 'EXP-FORMULA'})
+        hoja = self.hoja_xlsx(respuesta)
+        columna = [celda.value for celda in hoja[1]].index('Empresa')
+        celda = hoja[2][columna]
+        self.assertEqual(celda.data_type, 's')
+        self.assertEqual(celda.value, '=1+1')
+
+    def test_solo_supervision_y_gerencia_pueden_exportar(self):
+        for usuario in (self.tecnico, self.evaluador):
+            self.autenticar(usuario)
+            respuesta = self.client.get(self.url)
+            self.assertEqual(respuesta.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_formato_invalido(self):
+        self.autenticar(self.admin)
+        respuesta = self.client.get(self.url, {'formato': 'pdf'})
+        self.assertEqual(respuesta.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_limite_de_filas(self):
+        self.autenticar(self.admin)
+        with patch('gio_app.views.MAX_FILAS', 5):
+            respuesta = self.client.get(self.url)
+        self.assertEqual(respuesta.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('máximo por reporte', str(respuesta.data['detail']))
