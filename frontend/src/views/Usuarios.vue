@@ -374,7 +374,7 @@ const alternarActivo = async (usuario) => {
 
 .listado__mono {
   font-family: ui-monospace, 'SFMono-Regular', Menlo, monospace;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--acento-claro);
 }
 

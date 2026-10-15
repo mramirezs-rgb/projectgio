@@ -601,7 +601,7 @@ const nombreEvaluador = (expediente) =>
 
 .dias__nombre {
   width: 90px;
-  font-weight: 600;
+  font-weight: 700;
 }
 
 .dias__fila select {

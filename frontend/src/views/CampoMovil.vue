@@ -526,7 +526,7 @@ const mapa = (direccion) =>
 .tarjeta__evidencias {
   font-size: 0.72rem;
   color: var(--indigo-texto);
-  font-weight: 600;
+  font-weight: 700;
 }
 
 .tarjeta__sitio {
@@ -595,7 +595,7 @@ const mapa = (direccion) =>
   margin: 0;
   font-size: 0.8125rem;
   color: var(--verde-texto);
-  font-weight: 600;
+  font-weight: 700;
 }
 
 .detalle__diagnostico {

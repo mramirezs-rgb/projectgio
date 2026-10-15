@@ -683,7 +683,7 @@ onUnmounted(() => document.removeEventListener('keydown', alPulsarTecla))
   background-color: var(--acento);
   color: var(--sobre-acento);
   font-size: 0.65rem;
-  font-weight: 800;
+  font-weight: 700;
   letter-spacing: 0.06em;
   padding: 0.25rem 0.5rem;
   border-radius: var(--radio-sm);
@@ -744,7 +744,7 @@ onUnmounted(() => document.removeEventListener('keydown', alPulsarTecla))
   border-bottom: 2px solid transparent;
   color: var(--apagado);
   font-size: 0.8125rem;
-  font-weight: 600;
+  font-weight: 700;
   white-space: nowrap;
 }
 
@@ -753,9 +753,8 @@ onUnmounted(() => document.removeEventListener('keydown', alPulsarTecla))
 }
 
 .pestanas__btn--activa {
-  color: var(--acento-claro);
-  border-bottom-color: var(--acento-claro);
-  background-color: var(--resalte);
+  color: var(--texto);
+  border-bottom-color: var(--texto);
 }
 
 .caja__cuerpo {

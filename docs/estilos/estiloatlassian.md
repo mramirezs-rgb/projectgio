@@ -1,8 +1,8 @@
 # estiloatlassian
 
 Referencia de diseño catalogada para GIO, tomada del sistema visual de Atlassian (Jira, Confluence,
-Trello). **Está aplicada** en `frontend/src/assets/main.css` en sus dos variantes: el tema claro
-sigue la referencia y el oscuro es una derivación propia (ver "Tema oscuro derivado").
+Trello). **No está aplicada**: se probó y se reemplazó por [`estilobmw`](estilobmw.md). Las notas de
+aplicación y el tema oscuro derivado que siguen quedan como referencia por si se vuelve a usar.
 
 - Fuente original: [`fuentes/atlassian-DESIGN.md`](fuentes/atlassian-DESIGN.md) (copia sin modificar).
 - Origen declarado en el archivo: https://www.atlassian.com

@@ -87,8 +87,8 @@ const salir = async () => {
   flex-wrap: wrap;
   align-items: center;
   gap: 12px 20px;
-  min-height: 56px;
-  padding: 8px 16px;
+  min-height: 64px;
+  padding: 8px 24px;
   background-color: var(--barra);
   color: var(--sobre-barra);
   border-bottom: 1px solid var(--barra-borde);
@@ -109,10 +109,10 @@ const salir = async () => {
   place-items: center;
   width: 36px;
   height: 36px;
-  border-radius: var(--radio-campo);
-  background: var(--sobre-barra);
-  color: var(--barra);
-  font-weight: 800;
+  border-radius: var(--radio-pildora);
+  background: var(--acento);
+  color: var(--sobre-acento);
+  font-weight: 700;
   font-size: 0.8rem;
   letter-spacing: 0.04em;
   flex-shrink: 0;
@@ -142,36 +142,23 @@ const salir = async () => {
 }
 
 .barra__enlace {
-  padding: 8px 12px;
-  border-radius: var(--radio-campo);
+  padding: 12px;
+  border-radius: 0;
   color: var(--sobre-barra-apagado);
   text-decoration: none;
-  font-size: 0.8125rem;
-  font-weight: 600;
+  font-size: 0.875rem;
+  font-weight: 400;
+  letter-spacing: 0.3px;
   white-space: nowrap;
 }
 .barra__enlace:hover {
-  background-color: rgb(255 255 255 / 0.08);
   color: var(--sobre-barra);
   text-decoration: none;
 }
 .barra__enlace--activo {
   color: var(--sobre-barra);
-  box-shadow: inset 0 -2px 0 var(--sobre-barra);
-  border-radius: 0;
-}
-
-/* Los botones secundarios se invierten sobre la barra oscura. */
-.barra :deep(.gio-boton--secundario) {
-  background-color: transparent;
-  border-color: rgb(255 255 255 / 0.35);
-  color: var(--sobre-barra);
-}
-.barra :deep(.gio-boton--secundario:hover:not(:disabled)) {
-  background-color: rgb(255 255 255 / 0.1);
-}
-.barra :deep(:focus-visible) {
-  outline-color: var(--sobre-barra);
+  font-weight: 700;
+  box-shadow: inset 0 -2px 0 var(--acento);
 }
 
 .barra__usuario {
@@ -188,7 +175,7 @@ const salir = async () => {
 }
 .barra__nombre {
   font-size: 0.8125rem;
-  font-weight: 600;
+  font-weight: 700;
 }
 .barra__rol {
   font-size: 0.6875rem;

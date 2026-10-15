@@ -111,10 +111,10 @@ const enviar = async () => {
   width: 54px;
   height: 54px;
   margin: 0 auto 0.85rem;
-  border-radius: var(--radio);
-  background: var(--barra);
-  color: var(--sobre-barra);
-  font-weight: 800;
+  border-radius: var(--radio-pildora);
+  background: var(--acento);
+  color: var(--sobre-acento);
+  font-weight: 700;
   letter-spacing: 0.05em;
 }
 

@@ -170,7 +170,7 @@ const alternarTodo = (evento) => {
   background-color: var(--superficie);
   color: var(--apagado);
   padding: 0.7rem 0.85rem;
-  font-weight: 600;
+  font-weight: 700;
   font-size: 0.72rem;
   text-transform: uppercase;
   letter-spacing: 0.03em;
@@ -238,7 +238,7 @@ const alternarTodo = (evento) => {
 
 .tabla__fuerte {
   display: block;
-  font-weight: 600;
+  font-weight: 700;
 }
 
 .tabla__sub {

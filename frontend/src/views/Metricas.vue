@@ -308,7 +308,7 @@ const exportarTecnico = () => {
 
 .tarjeta__titulo {
   font-size: 0.68rem;
-  font-weight: 600;
+  font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--apagado);
@@ -372,14 +372,14 @@ const exportarTecnico = () => {
 .barras__pista {
   height: 8px;
   background-color: var(--campo);
-  border-radius: 999px;
+  border-radius: var(--radio-sm);
   overflow: hidden;
 }
 
 .barras__pista span {
   display: block;
   height: 100%;
-  border-radius: 999px;
+  border-radius: var(--radio-sm);
   transition: width var(--medio) var(--curva);
 }
 

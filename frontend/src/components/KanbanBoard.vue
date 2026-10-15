@@ -194,7 +194,7 @@ const soltar = (evento, idColumna) => {
   font-size: 0.72rem;
   font-weight: 700;
   padding: 0.1rem 0.5rem;
-  border-radius: 999px;
+  border-radius: var(--radio-sm);
 }
 
 .tablero__mas {
@@ -313,7 +313,7 @@ const soltar = (evento, idColumna) => {
 
 .ficha__evidencias {
   color: var(--indigo-texto);
-  font-weight: 600;
+  font-weight: 700;
 }
 
 .ficha__mttr {
@@ -328,7 +328,7 @@ const soltar = (evento, idColumna) => {
 .ficha__pendiente {
   color: var(--ambar-texto);
   border: 1px solid rgb(245 158 11 / 0.4);
-  border-radius: 999px;
+  border-radius: var(--radio-sm);
   padding: 0 0.35rem;
 }
 </style>

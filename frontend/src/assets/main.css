@@ -15,49 +15,53 @@
 }
 
 /*
- * Tema estiloatlassian (docs/estilos/estiloatlassian.md): plano, casi monocromático, un solo
- * acento, rejilla de 4 px y movimiento rápido. El tema se elige con data-theme en <html>
- * (ver useTema.js). El oscuro es el de omisión y es una derivación propia del estilo, que
- * solo define el claro.
+ * Tema estilobmw (docs/estilos/estilobmw.md): corporativo y preciso. Esquinas rectas, un solo
+ * color de acción (azul BMW), sin sombras, títulos en 700 y etiquetas en mayúsculas espaciadas.
+ * El tema se elige con data-theme en <html> (ver useTema.js). El oscuro, que es el de omisión,
+ * se deriva de las bandas azul marino del estilo; la referencia solo define superficies claras.
  */
 :root {
   /* Superficies */
-  --fondo: #161718;
-  --panel: #1f1f21;
-  --panel-alto: #2b2c2f;
-  --superficie: #1a1b1d;
-  --campo: #242528;
-  --seleccion: #1c2b42;
-  --resalte: rgb(133 184 255 / 0.1);
-  --velo: rgb(8 9 10 / 0.72);
+  --fondo: #11161c;
+  --panel: #1a2129;
+  --panel-alto: #262e38;
+  --superficie: #161c23;
+  --campo: #141a21;
+  --seleccion: #1d3554;
+  --resalte: rgb(110 168 240 / 0.08);
+  --velo: rgb(5 8 12 / 0.72);
 
-  /* Barra superior: casi negra en ambos temas */
-  --barra: #101214;
-  --sobre-barra: #ffffff;
-  --sobre-barra-apagado: rgb(255 255 255 / 0.72);
-  --barra-borde: rgb(255 255 255 / 0.12);
+  /* Barra superior */
+  --barra: #1a2129;
+  --sobre-barra: #f2f2f2;
+  --sobre-barra-apagado: #bbbbbb;
+  --barra-borde: #2e3742;
 
   /* Bordes */
-  --borde: #37383c;
-  --borde-campo: #7e8188;
-  --linea: #2e2f33;
+  --borde: #2e3742;
+  --borde-campo: #6b7683;
+  --linea: #262e38;
 
   /* Texto */
-  --texto: #dfe1e4;
-  --texto-suave: #cecfd2;
-  --apagado: #a9abaf;
-  --tenue: #8c8f97;
+  --texto: #f2f2f2;
+  --texto-suave: #dddddd;
+  --apagado: #bbbbbb;
+  --tenue: #8f99a5;
 
-  /* Acento único */
-  --acento: #85b8ff;
-  --acento-hover: #a9ccff;
-  --sobre-acento: #101214;
-  --acento-claro: #85b8ff;
+  /* Acento único: azul BMW */
+  --acento: #1c69d4;
+  --acento-hover: #0653b6;
+  --sobre-acento: #ffffff;
+  --acento-claro: #6ea8f0;
+
+  /* Chip o conmutador activo: tinta sobre papel, invertido en oscuro */
+  --chip-activo: #f2f2f2;
+  --sobre-chip-activo: #1a2129;
 
   /* Estados (siempre acompañados de texto o ícono) */
-  --ok: #10b981;
+  --ok: #22c55e;
   --alerta: #f59e0b;
-  --peligro: #ef4444;
+  --peligro: #dc2626;
   --verde-texto: #6ee7b7;
   --verde-vivo: #34d399;
   --rojo-texto: #fca5a5;
@@ -70,46 +74,55 @@
   --indigo-texto: #a5b4fc;
   --peligro-borde: #7f1d1d;
 
-  --scroll: #3d3f43;
-  --scroll-hover: #55575d;
+  --scroll: #2e3742;
+  --scroll-hover: #4a5563;
 
-  /* Radios */
-  --radio-sm: 3px;
-  --radio-campo: 4px;
-  --radio: 8px;
+  /* Radios: rectangular en todo, circular solo para botones de ícono */
+  --radio-sm: 2px;
+  --radio-campo: 0;
+  --radio: 0;
+  --radio-boton: 0;
   --radio-pildora: 9999px;
 
   /* Movimiento */
-  --curva: cubic-bezier(0.4, 0, 0, 1);
-  --rapido: 75ms;
-  --medio: 400ms;
+  --curva: cubic-bezier(0.4, 0, 0.2, 1);
+  --rapido: 120ms;
+  --medio: 300ms;
+
+  --fuente: 'Inter Variable', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+    sans-serif;
 
   color-scheme: dark;
 }
 
 :root[data-theme='light'] {
-  --fondo: #f8f8f8;
+  --fondo: #f7f7f7;
   --panel: #ffffff;
-  --panel-alto: #f0f1f2;
-  --superficie: #f8f8f8;
+  --panel-alto: #ebebeb;
+  --superficie: #fafafa;
   --campo: #ffffff;
-  --seleccion: #cfe1fd;
-  --resalte: rgb(28 43 66 / 0.06);
-  --velo: rgb(16 18 20 / 0.55);
+  --seleccion: #e8f0fb;
+  --resalte: rgb(28 105 212 / 0.05);
+  --velo: rgb(26 33 41 / 0.6);
 
-  --borde: #dcdfe4;
-  --borde-campo: #8c8f97;
-  --linea: #e9eaed;
+  --barra: #ffffff;
+  --sobre-barra: #262626;
+  --sobre-barra-apagado: #6b6b6b;
+  --barra-borde: #e6e6e6;
 
-  --texto: #292a2e;
-  --texto-suave: #292a2e;
-  --apagado: #5e6066;
-  --tenue: #5e6066;
+  --borde: #e6e6e6;
+  --borde-campo: #8f8f8f;
+  --linea: #ebebeb;
 
-  --acento: #1c2b42;
-  --acento-hover: #2c4060;
-  --sobre-acento: #ffffff;
-  --acento-claro: #1c2b42;
+  --texto: #262626;
+  --texto-suave: #3c3c3c;
+  --apagado: #6b6b6b;
+  --tenue: #6b6b6b;
+
+  --acento-claro: #1c69d4;
+
+  --chip-activo: #262626;
+  --sobre-chip-activo: #ffffff;
 
   --verde-texto: #047857;
   --verde-vivo: #059669;
@@ -123,8 +136,8 @@
   --indigo-texto: #4338ca;
   --peligro-borde: #f0a3a3;
 
-  --scroll: #c1c4ca;
-  --scroll-hover: #8c8f97;
+  --scroll: #cccccc;
+  --scroll-hover: #9a9a9a;
 
   color-scheme: light;
 }
@@ -148,10 +161,9 @@ body,
 body {
   background-color: var(--fondo);
   color: var(--texto);
-  font-family:
-    system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  font-family: var(--fuente);
   font-size: 15px;
-  line-height: 1.5;
+  line-height: 1.55;
   -webkit-text-size-adjust: 100%;
 }
 
@@ -161,7 +173,8 @@ h3,
 h4 {
   margin: 0;
   font-weight: 700;
-  line-height: 1.2;
+  line-height: 1.25;
+  letter-spacing: 0;
 }
 
 a {
@@ -169,6 +182,14 @@ a {
 }
 a:hover {
   text-decoration: underline;
+}
+
+/* Texto descriptivo en Light 300; los avisos conservan 400 para leerse bien. */
+p {
+  font-weight: 300;
+}
+p[role] {
+  font-weight: 400;
 }
 
 button {
@@ -189,7 +210,7 @@ textarea {
   background-color: var(--campo);
   border: 1px solid var(--borde-campo);
   border-radius: var(--radio-campo);
-  padding: 8px 12px;
+  padding: 10px 14px;
   width: 100%;
   min-width: 0;
   outline: none;
@@ -199,7 +220,7 @@ textarea {
 input:hover:not(:disabled),
 select:hover:not(:disabled),
 textarea:hover:not(:disabled) {
-  border-color: var(--apagado);
+  border-color: var(--texto);
 }
 
 input[type='checkbox'],
@@ -214,10 +235,12 @@ input[type='radio'] {
   outline-offset: 2px;
 }
 
+/* En campos, el foco engrosa el borde en tinta, como en la referencia. */
 input:focus-visible,
 select:focus-visible,
 textarea:focus-visible {
-  border-color: var(--acento-claro);
+  border-color: var(--texto);
+  outline: 1px solid var(--texto);
   outline-offset: 0;
 }
 
@@ -245,13 +268,14 @@ textarea {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  min-height: 36px;
-  padding: 8px 16px;
+  min-height: 40px;
+  padding: 10px 24px;
   border: 1px solid transparent;
-  border-radius: var(--radio-pildora);
-  font-weight: 600;
+  border-radius: var(--radio-boton);
+  font-weight: 700;
   font-size: 0.875rem;
-  line-height: 1.2;
+  letter-spacing: 0.5px;
+  line-height: 1;
   white-space: nowrap;
   transition:
     background-color var(--rapido) var(--curva),
@@ -310,11 +334,11 @@ textarea {
 .gio-etiqueta {
   display: block;
   font-size: 0.75rem;
-  font-weight: 600;
-  letter-spacing: 0.02em;
+  font-weight: 700;
+  letter-spacing: 1.2px;
   text-transform: uppercase;
   color: var(--apagado);
-  margin-bottom: 4px;
+  margin-bottom: 6px;
 }
 
 .gio-pastilla {
@@ -379,7 +403,7 @@ textarea {
 }
 
 .gio-enlace {
-  font-weight: 800;
+  font-weight: 700;
   font-size: 0.6875rem;
   letter-spacing: 0.05em;
 }
@@ -482,12 +506,13 @@ textarea {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 36px;
-  padding: 8px 20px;
+  min-height: 40px;
+  padding: 10px 24px;
   margin: 0 4px;
   border: 1px solid transparent;
-  border-radius: var(--radio-pildora);
-  font-weight: 600;
+  border-radius: var(--radio-boton);
+  font-weight: 700;
+  letter-spacing: 0.5px;
   font-size: 0.875rem;
   cursor: pointer;
 }

@@ -190,7 +190,7 @@ const quitar = async (evidencia) => {
 .evidencias__barra {
   height: 6px;
   background-color: var(--panel-alto);
-  border-radius: 999px;
+  border-radius: var(--radio-sm);
   overflow: hidden;
 }
 

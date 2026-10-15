@@ -598,7 +598,7 @@ const ordenar = async (campo) => {
 
 .indicador__titulo {
   font-size: 0.68rem;
-  font-weight: 600;
+  font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--apagado);
@@ -658,12 +658,12 @@ const ordenar = async (campo) => {
   color: var(--apagado);
   padding: 0.5rem 0.9rem;
   font-size: 0.8125rem;
-  font-weight: 600;
+  font-weight: 700;
 }
 
 .conmutador__btn--activo {
-  background-color: var(--acento);
-  color: var(--sobre-acento);
+  background-color: var(--chip-activo);
+  color: var(--sobre-chip-activo);
 }
 
 .masiva {
