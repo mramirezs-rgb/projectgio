@@ -218,8 +218,8 @@ const moverEnTablero = async ({ incidente, estatus }) => {
   if (estatus === ESTATUS.LIQUIDADO) {
     abrirEditar(incidente)
     mostrarAdvertencia(
-      'Liquidación con evidencia',
-      'Para liquidar un folio se requiere diagnóstico final y al menos una evidencia fotográfica.',
+      'Liquidación del folio',
+      'Para liquidar un folio se requiere el diagnóstico final. La evidencia fotográfica es opcional.',
     )
     return
   }

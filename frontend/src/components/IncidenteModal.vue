@@ -100,8 +100,6 @@ const centralesDisponibles = computed(() => {
   return [...conjunto].sort()
 })
 
-const sinEvidencias = computed(() => evidencias.value.length === 0)
-
 const puedeLiquidarAhora = computed(
   () =>
     props.editando &&
@@ -182,19 +180,10 @@ const validar = () => {
   if (destino === ESTATUS.LIQUIDADO && !String(form.value.diagnostico_final || '').trim()) {
     fallos.diagnostico_final = 'El diagnóstico final es obligatorio para liquidar.'
   }
-  if (
-    destino === ESTATUS.LIQUIDADO &&
-    estatusOriginal.value !== ESTATUS.LIQUIDADO &&
-    sinEvidencias.value
-  ) {
-    fallos.evidencias = 'Cargue al menos una evidencia fotográfica antes de liquidar.'
-  }
 
   errores.value = fallos
   if (Object.keys(fallos).length) {
-    if (fallos.diagnostico_final) tabActiva.value = 'liquidacion'
-    else if (fallos.evidencias) tabActiva.value = 'evidencias'
-    else tabActiva.value = 'general'
+    tabActiva.value = fallos.diagnostico_final ? 'liquidacion' : 'general'
     return false
   }
   return true
@@ -581,9 +570,6 @@ onUnmounted(() => document.removeEventListener('keydown', alPulsarTecla))
 
         <div v-show="tabActiva === 'evidencias'">
           <p v-if="problemaAnexos" class="campo__error">{{ problemaAnexos }}</p>
-          <p v-if="errores.evidencias && sinEvidencias" class="campo__error" role="alert">
-            {{ errores.evidencias }}
-          </p>
           <EvidenciaUploader
             v-if="editando"
             :incidente-id="modelo.id"
@@ -621,8 +607,7 @@ onUnmounted(() => document.removeEventListener('keydown', alPulsarTecla))
             v-if="puedeLiquidarAhora"
             type="button"
             class="gio-boton gio-boton--exito"
-            :disabled="guardando || sinEvidencias"
-            :title="sinEvidencias ? 'Cargue al menos una evidencia fotográfica' : ''"
+            :disabled="guardando"
             @click="liquidar"
           >
             Liquidar folio
