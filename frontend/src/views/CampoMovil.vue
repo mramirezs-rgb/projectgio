@@ -25,7 +25,6 @@ const problema = ref('')
 const folios = ref([])
 const expandido = ref(null)
 const evidencias = ref([])
-const cargandoEvidencias = ref(false)
 const enviando = ref(false)
 const filtro = ref('activos')
 
@@ -79,14 +78,11 @@ const alternar = async (folio) => {
 }
 
 const cargarEvidencias = async (id) => {
-  cargandoEvidencias.value = true
   try {
     const { data } = await getEvidencias(id)
     evidencias.value = data || []
   } catch {
     evidencias.value = []
-  } finally {
-    cargandoEvidencias.value = false
   }
 }
 
@@ -115,10 +111,6 @@ const liquidar = async (folio) => {
       'Diagnóstico insuficiente',
       'Describa la causa y la reparación efectuada (mínimo 15 caracteres).',
     )
-    return
-  }
-  if (evidencias.value.length === 0) {
-    mostrarError('Falta evidencia', 'Cargue al menos una fotografía antes de liquidar el folio.')
     return
   }
   const confirmado = await confirmarAccion(
@@ -344,7 +336,7 @@ const mapa = (direccion) =>
             <button
               type="button"
               class="gio-boton gio-boton--exito gio-boton--tactil"
-              :disabled="enviando || cargandoEvidencias"
+              :disabled="enviando"
               @click="liquidar(folio)"
             >
               {{ enviando ? 'Enviando…' : 'Liquidar folio' }}

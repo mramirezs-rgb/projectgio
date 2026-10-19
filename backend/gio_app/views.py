@@ -34,7 +34,6 @@ from .serializers import (
     IncidenteSerializer,
     IncidenteTecnicoSerializer,
     MAX_DIAS_PROGRAMACION,
-    MENSAJE_SIN_EVIDENCIA,
     ProgramarTurnosSerializer,
     RepartoTurnosSerializer,
     TurnoEvaluadorSerializer,
@@ -158,8 +157,6 @@ class IncidenteViewSet(viewsets.ModelViewSet):
             raise ValidationError({
                 'estatus': f'El folio en estatus {incidente.estatus} no puede liquidarse directamente.'
             })
-        if not incidente.evidencias.exists():
-            raise ValidationError({'evidencias': MENSAJE_SIN_EVIDENCIA})
 
         estatus_anterior = incidente.estatus
         incidente.estatus = Incidente.Estatus.LIQUIDADO
@@ -501,13 +498,6 @@ class EvidenciaViewSet(viewsets.ModelViewSet):
             raise PermissionDenied(MENSAJE_BLOQUEADO)
         if not (usuario.tiene_vision_global or instance.subido_por_id == usuario.id):
             raise PermissionDenied('Solo puede eliminar las evidencias que usted cargó.')
-        incidente = instance.incidente
-        if (incidente.estatus == Incidente.Estatus.LIQUIDADO
-                and not incidente.evidencias.exclude(pk=instance.pk).exists()):
-            raise ValidationError({
-                'evidencias': 'Un folio liquidado debe conservar al menos una evidencia fotográfica. '
-                              'Cargue otra antes de eliminar esta.'
-            })
         BitacoraIncidente.registrar(
             instance.incidente, usuario, BitacoraIncidente.Accion.EVIDENCIA,
             detalle=f'Evidencia #{instance.pk} eliminada',
