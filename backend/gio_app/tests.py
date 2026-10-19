@@ -221,6 +221,57 @@ class EvidenciaYLiquidacionTests(BaseGIOTestCase):
         self.assertEqual(respuesta.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn('diagnostico_final', respuesta.data)
 
+    def test_no_se_liquida_sin_evidencia_al_editar_el_estatus(self):
+        url = reverse('incidente-detail', args=[self.propio.pk])
+        for usuario in (self.tecnico, self.evaluador, self.sub, self.admin):
+            self.autenticar(usuario)
+            respuesta = self.client.patch(url, {
+                'estatus': Incidente.Estatus.LIQUIDADO,
+                'diagnostico_final': 'Empalme reparado',
+            }, format='json')
+            self.assertEqual(respuesta.status_code, status.HTTP_400_BAD_REQUEST)
+            self.assertIn('evidencias', respuesta.data)
+        self.propio.refresh_from_db()
+        self.assertEqual(self.propio.estatus, Incidente.Estatus.EN_PROCESO)
+
+    def test_no_se_crea_un_folio_ya_liquidado(self):
+        self.autenticar(self.sub)
+        respuesta = self.client.post(reverse('incidente-list'), {
+            'folio': 'NUEVO-LIQ', 'empresa': 'ACME', 'area_operativa': 'PUEBLA',
+            'estatus': Incidente.Estatus.LIQUIDADO, 'diagnostico_final': 'Cerrado',
+        }, format='json')
+        self.assertEqual(respuesta.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('evidencias', respuesta.data)
+
+    @override_settings(EVIDENCIA_MAX_BYTES=512 * 1024)
+    def test_se_liquida_al_editar_el_estatus_con_evidencia(self):
+        self.autenticar(self.tecnico)
+        self.client.post(self.url_evidencias, {'imagen': imagen_en_memoria()}, format='multipart')
+        respuesta = self.client.patch(reverse('incidente-detail', args=[self.propio.pk]), {
+            'estatus': Incidente.Estatus.LIQUIDADO,
+            'diagnostico_final': 'Empalme reparado',
+        }, format='json')
+        self.assertEqual(respuesta.status_code, status.HTTP_200_OK)
+        self.assertEqual(respuesta.data['estatus'], Incidente.Estatus.LIQUIDADO)
+
+    @override_settings(EVIDENCIA_MAX_BYTES=512 * 1024)
+    def test_folio_liquidado_conserva_su_ultima_evidencia(self):
+        self.autenticar(self.tecnico)
+        primera = self.client.post(self.url_evidencias, {'imagen': imagen_en_memoria()},
+                                   format='multipart').data['id']
+        self.client.post(self.url_liquidar, {'diagnostico_final': 'Empalme reparado'},
+                         format='json')
+
+        self.autenticar(self.admin)
+        respuesta = self.client.delete(reverse('evidencia-detail', args=[primera]))
+        self.assertEqual(respuesta.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(self.propio.evidencias.count(), 1)
+
+        self.client.post(self.url_evidencias, {'imagen': imagen_en_memoria()}, format='multipart')
+        respuesta = self.client.delete(reverse('evidencia-detail', args=[primera]))
+        self.assertEqual(respuesta.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertEqual(self.propio.evidencias.count(), 1)
+
     @override_settings(EVIDENCIA_MAX_BYTES=512 * 1024)
     def test_flujo_completo_de_liquidacion(self):
         self.autenticar(self.tecnico)

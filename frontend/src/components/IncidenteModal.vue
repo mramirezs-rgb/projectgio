@@ -182,10 +182,19 @@ const validar = () => {
   if (destino === ESTATUS.LIQUIDADO && !String(form.value.diagnostico_final || '').trim()) {
     fallos.diagnostico_final = 'El diagnóstico final es obligatorio para liquidar.'
   }
+  if (
+    destino === ESTATUS.LIQUIDADO &&
+    estatusOriginal.value !== ESTATUS.LIQUIDADO &&
+    sinEvidencias.value
+  ) {
+    fallos.evidencias = 'Cargue al menos una evidencia fotográfica antes de liquidar.'
+  }
 
   errores.value = fallos
   if (Object.keys(fallos).length) {
-    tabActiva.value = fallos.diagnostico_final ? 'liquidacion' : 'general'
+    if (fallos.diagnostico_final) tabActiva.value = 'liquidacion'
+    else if (fallos.evidencias) tabActiva.value = 'evidencias'
+    else tabActiva.value = 'general'
     return false
   }
   return true
@@ -572,6 +581,9 @@ onUnmounted(() => document.removeEventListener('keydown', alPulsarTecla))
 
         <div v-show="tabActiva === 'evidencias'">
           <p v-if="problemaAnexos" class="campo__error">{{ problemaAnexos }}</p>
+          <p v-if="errores.evidencias && sinEvidencias" class="campo__error" role="alert">
+            {{ errores.evidencias }}
+          </p>
           <EvidenciaUploader
             v-if="editando"
             :incidente-id="modelo.id"

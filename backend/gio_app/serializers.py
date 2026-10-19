@@ -8,6 +8,8 @@ UsuarioGIO = get_user_model()
 
 FORMATOS_IMAGEN = ('JPEG', 'JPG', 'PNG', 'WEBP')
 
+MENSAJE_SIN_EVIDENCIA = 'Debe cargarse al menos una evidencia fotográfica antes de liquidar.'
+
 
 class EvidenciaIncidenteSerializer(serializers.ModelSerializer):
     imagen_url = serializers.SerializerMethodField()
@@ -150,6 +152,10 @@ class IncidenteSerializer(PermisosFolioMixin, serializers.ModelSerializer):
                 raise serializers.ValidationError({
                     'diagnostico_final': 'El diagnóstico final es obligatorio para liquidar el folio.'
                 })
+            # Solo al entrar a LIQUIDADO: Gerencia puede seguir editando folios ya liquidados.
+            ya_liquidado = instancia and instancia.estatus == Incidente.Estatus.LIQUIDADO
+            if not ya_liquidado and not (instancia and instancia.evidencias.exists()):
+                raise serializers.ValidationError({'evidencias': MENSAJE_SIN_EVIDENCIA})
         return datos
 
 
