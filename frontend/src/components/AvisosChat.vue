@@ -1,12 +1,8 @@
 <script setup>
 import { computed, onUnmounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
-import { useAuth } from '../composables/useAuth.js'
 import { useChat } from '../composables/useChat.js'
 
-const router = useRouter()
-const { esTecnico } = useAuth()
-const { total, recientes } = useChat()
+const { total, recientes, irAlChat } = useChat()
 
 const abierto = ref(false)
 const boton = ref(null)
@@ -42,10 +38,7 @@ const alternar = () => {
 
 const abrirFolio = (item) => {
   cerrar()
-  router.push({
-    name: esTecnico.value ? 'campo' : 'tablero',
-    query: { folio: String(item.id), chat: '1' },
-  })
+  irAlChat(item.id)
 }
 
 const horaDe = (valor) => {
@@ -65,6 +58,7 @@ onUnmounted(cerrar)
       ref="boton"
       type="button"
       class="gio-boton gio-boton--secundario avisos__boton"
+      :class="{ 'avisos__boton--pendiente': total }"
       :aria-label="etiqueta"
       :title="etiqueta"
       :aria-expanded="abierto"
@@ -127,6 +121,11 @@ onUnmounted(cerrar)
   width: 40px;
   height: 40px;
   border-radius: var(--radio-pildora);
+}
+
+.avisos__boton--pendiente {
+  border-color: var(--acento);
+  color: var(--acento-claro);
 }
 
 .avisos__cuenta {

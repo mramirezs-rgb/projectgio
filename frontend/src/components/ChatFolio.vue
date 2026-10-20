@@ -20,7 +20,7 @@ const LADO_POR_ROL = {
 }
 
 const { usuario } = useAuth()
-const { marcarLeido } = useChat()
+const { marcarLeido, mostrarChat, ocultarChat } = useChat()
 
 const mensajes = ref([])
 const cargando = ref(false)
@@ -116,14 +116,24 @@ const alPulsarEnter = (evento) => {
 
 const iniciar = () => {
   clearInterval(temporizador)
+  mostrarChat(props.incidenteId)
   mensajes.value = []
   cargar()
   temporizador = setInterval(buscarNuevos, INTERVALO_MS)
 }
 
 onMounted(iniciar)
-onUnmounted(() => clearInterval(temporizador))
-watch(() => props.incidenteId, iniciar)
+onUnmounted(() => {
+  clearInterval(temporizador)
+  ocultarChat(props.incidenteId)
+})
+watch(
+  () => props.incidenteId,
+  (_, anterior) => {
+    ocultarChat(anterior)
+    iniciar()
+  },
+)
 </script>
 
 <template>
