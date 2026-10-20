@@ -20,10 +20,13 @@ from usuarios.permissions import (
     PuedeAsignar, PuedeCrearIncidente, PuedeEditarIncidente, PuedeExportar,
 )
 
+from .chat import mensajes_pendientes
 from .desempeno import desempeno_de_campo
 from .exportacion import MAX_FILAS, generar_csv, generar_xlsx, nombre_de_archivo
 from .filters import IncidenteFilter
-from .models import BitacoraIncidente, EvidenciaIncidente, Incidente, TurnoEvaluador
+from .models import (
+    BitacoraIncidente, EvidenciaIncidente, Incidente, LecturaChat, TurnoEvaluador,
+)
 from .reparto import programar_turnos, repartir_folios_del_dia
 from .serializers import (
     AsignacionMasivaSerializer,
@@ -34,6 +37,7 @@ from .serializers import (
     IncidenteSerializer,
     IncidenteTecnicoSerializer,
     MAX_DIAS_PROGRAMACION,
+    MensajeFolioSerializer,
     ProgramarTurnosSerializer,
     RepartoTurnosSerializer,
     TurnoEvaluadorSerializer,
@@ -54,6 +58,9 @@ CAMPOS_AUDITADOS = (
 )
 
 MENSAJE_BLOQUEADO = 'El folio está liquidado y no admite cambios. Solo Gerencia puede modificarlo.'
+
+# Mensajes que trae la primera carga de un chat; después se piden solo los nuevos.
+MAX_MENSAJES_POR_CONSULTA = 200
 
 
 def queryset_por_rol(usuario):
@@ -228,6 +235,37 @@ class IncidenteViewSet(viewsets.ModelViewSet):
         incidente = self.get_object()
         serializer = BitacoraIncidenteSerializer(incidente.bitacora.all()[:200], many=True)
         return Response(serializer.data)
+
+    @action(detail=True, methods=['get', 'post'], url_path='mensajes', throttle_scope='chat')
+    def mensajes(self, request, pk=None):
+        """Chat del folio. GET devuelve los últimos mensajes, o con `despues` solo los posteriores
+        a ese id, y los marca como leídos para quien consulta. Admite mensajes aunque el folio
+        esté liquidado: la conversación no modifica el folio."""
+        incidente = self.get_object()
+        if request.method == 'POST':
+            serializer = MensajeFolioSerializer(data=request.data)
+            serializer.is_valid(raise_exception=True)
+            mensaje = serializer.save(incidente=incidente, autor=request.user)
+            LecturaChat.marcar(incidente, request.user, mensaje.pk)
+            return Response(MensajeFolioSerializer(mensaje).data, status=status.HTTP_201_CREATED)
+
+        consulta = incidente.mensajes.select_related('autor')
+        despues = request.query_params.get('despues')
+        if despues:
+            try:
+                consulta = consulta.filter(pk__gt=int(despues))
+            except ValueError:
+                raise ValidationError({'despues': 'Indique el id del último mensaje recibido.'})
+            mensajes = list(consulta[:MAX_MENSAJES_POR_CONSULTA])
+        else:
+            mensajes = list(consulta.order_by('-id')[:MAX_MENSAJES_POR_CONSULTA])[::-1]
+        if mensajes:
+            LecturaChat.marcar(incidente, request.user, mensajes[-1].pk)
+        return Response(MensajeFolioSerializer(mensajes, many=True).data)
+
+    @action(detail=False, methods=['get'], url_path='mensajes-pendientes')
+    def pendientes_de_chat(self, request):
+        return Response(mensajes_pendientes(request.user, self.get_queryset()))
 
     @action(detail=False, methods=['post'], url_path='asignar-masivo',
             permission_classes=[PuedeAsignar])

@@ -1,5 +1,6 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import IncidenteModal from '../components/IncidenteModal.vue'
 import KanbanBoard from '../components/KanbanBoard.vue'
 import TablaIncidentes from '../components/TablaIncidentes.vue'
@@ -25,6 +26,8 @@ import {
 } from '../utils/alerts.js'
 import { descargarArchivo, formatearHoras, marcaDeTiempo } from '../utils/formato.js'
 
+const route = useRoute()
+const router = useRouter()
 const { usuario, rol, permisos, esGerencia } = useAuth()
 const {
   cargando,
@@ -86,6 +89,7 @@ const FORM_VACIO = {
 
 const vista = ref('kanban')
 const modalAbierto = ref(false)
+const pestanaModal = ref('general')
 const editando = ref(false)
 const guardando = ref(false)
 const formActual = ref({ ...FORM_VACIO })
@@ -115,12 +119,14 @@ onMounted(async () => {
 
 const abrirNuevo = () => {
   formActual.value = { ...FORM_VACIO }
+  pestanaModal.value = 'general'
   editando.value = false
   modalAbierto.value = true
 }
 
-const abrirEditar = async (incidente) => {
+const abrirEditar = async (incidente, pestana = 'general') => {
   formActual.value = { ...FORM_VACIO, ...incidente }
+  pestanaModal.value = pestana
   editando.value = true
   modalAbierto.value = true
   try {
@@ -132,6 +138,18 @@ const abrirEditar = async (incidente) => {
     mostrarError('No se pudo abrir el folio', mensajeDeError(error))
   }
 }
+
+// La bandeja de mensajes llega con ?folio=<id>&chat=1 para abrir ese folio en su chat.
+watch(
+  () => route.query.folio,
+  (folio) => {
+    const id = Number(folio)
+    if (!id) return
+    abrirEditar({ id }, route.query.chat ? 'chat' : 'general')
+    router.replace({ query: {} })
+  },
+  { immediate: true },
+)
 
 watch(vista, async (nueva) => {
   modo.value = nueva
@@ -543,6 +561,7 @@ const ordenar = async (campo) => {
       :permisos="permisos"
       :rol="rol || usuario?.rol || ''"
       :guardando="guardando"
+      :pestana-inicial="pestanaModal"
       @close="modalAbierto = false"
       @save="guardar"
       @liquidar="liquidar"

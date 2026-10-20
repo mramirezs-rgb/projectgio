@@ -176,6 +176,10 @@ export const subirEvidencia = (id, formData, onProgreso) =>
   })
 export const eliminarEvidencia = (idEvidencia) => api.delete(`/evidencias/${idEvidencia}/`)
 
+export const getMensajes = (id, params) => api.get(`/incidentes/${id}/mensajes/`, { params })
+export const enviarMensaje = (id, texto) => api.post(`/incidentes/${id}/mensajes/`, { texto })
+export const getMensajesPendientes = () => api.get('/incidentes/mensajes-pendientes/')
+
 export const getTecnicos = (params) => api.get('/tecnicos/', { params })
 export const getEvaluadores = (params) => api.get('/evaluadores/', { params })
 export const getCentrales = (params) => api.get('/centrales/', { params })

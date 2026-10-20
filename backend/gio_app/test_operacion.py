@@ -511,3 +511,89 @@ class ExportacionReporteTests(BaseGIOTestCase):
             respuesta = self.client.get(self.url)
         self.assertEqual(respuesta.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn('máximo por reporte', str(respuesta.data['detail']))
+
+
+class ChatFolioTests(BaseGIOTestCase):
+    def setUp(self):
+        super().setUp()
+        self.url = reverse('incidente-mensajes', args=[self.propio.pk])
+        self.url_pendientes = reverse('incidente-pendientes-de-chat')
+
+    def escribir(self, usuario, texto, url=None):
+        self.autenticar(usuario)
+        return self.client.post(url or self.url, {'texto': texto}, format='json')
+
+    def pendientes(self, usuario):
+        self.autenticar(usuario)
+        return self.client.get(self.url_pendientes).data
+
+    def test_planta_externa_e_interna_conversan_en_el_folio(self):
+        respuesta = self.escribir(self.tecnico, '  Llegué al sitio, el par está mojado.  ')
+        self.assertEqual(respuesta.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(respuesta.data['texto'], 'Llegué al sitio, el par está mojado.')
+        self.assertEqual(respuesta.data['autor_rol'], UsuarioGIO.Rol.TECNICO)
+        self.escribir(self.evaluador, 'Enterado, veo el puerto caído en gestión.')
+
+        respuesta = self.client.get(self.url)
+        self.assertEqual([m['autor'] for m in respuesta.data],
+                         [self.tecnico.pk, self.evaluador.pk])
+        self.assertEqual(respuesta.data[1]['autor_nombre'], self.evaluador.nombre_completo)
+
+    def test_quien_no_ve_el_folio_no_ve_ni_escribe_en_su_chat(self):
+        self.escribir(self.tecnico, 'Mensaje interno del folio')
+        for usuario in (self.otro_tecnico, self.otro_evaluador):
+            self.autenticar(usuario)
+            self.assertEqual(self.client.get(self.url).status_code, status.HTTP_404_NOT_FOUND)
+            self.assertEqual(self.escribir(usuario, 'Hola').status_code,
+                             status.HTTP_404_NOT_FOUND)
+
+    def test_mensaje_vacio_o_demasiado_largo_se_rechaza(self):
+        self.assertEqual(self.escribir(self.tecnico, '   ').status_code,
+                         status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(self.escribir(self.tecnico, 'x' * 2001).status_code,
+                         status.HTTP_400_BAD_REQUEST)
+        self.assertFalse(self.propio.mensajes.exists())
+
+    def test_consulta_incremental_trae_solo_los_mensajes_nuevos(self):
+        primero = self.escribir(self.tecnico, 'Uno').data['id']
+        self.escribir(self.evaluador, 'Dos')
+        self.autenticar(self.tecnico)
+        respuesta = self.client.get(self.url, {'despues': primero})
+        self.assertEqual([m['texto'] for m in respuesta.data], ['Dos'])
+        self.assertEqual(self.client.get(self.url, {'despues': 'x'}).status_code,
+                         status.HTTP_400_BAD_REQUEST)
+
+    def test_avisa_de_mensajes_sin_leer_hasta_que_se_abre_el_chat(self):
+        self.escribir(self.tecnico, 'Necesito que liberen el puerto')
+        self.escribir(self.tecnico, 'Sigo en sitio')
+
+        avisos = self.pendientes(self.evaluador)
+        self.assertEqual(avisos['total'], 2)
+        self.assertEqual(avisos['por_folio'], {str(self.propio.pk): 2})
+        self.assertEqual(avisos['recientes'][0]['folio'], self.propio.folio)
+        self.assertEqual(avisos['recientes'][0]['ultimo']['texto'], 'Sigo en sitio')
+        self.assertEqual(self.pendientes(self.tecnico)['total'], 0)
+
+        self.autenticar(self.evaluador)
+        self.client.get(self.url)
+        self.assertEqual(self.pendientes(self.evaluador)['total'], 0)
+
+        self.escribir(self.tecnico, 'Ya quedó')
+        self.assertEqual(self.pendientes(self.evaluador)['total'], 1)
+
+    def test_supervision_solo_recibe_avisos_de_los_chats_en_que_participa(self):
+        self.escribir(self.tecnico, 'Reporte de avance')
+        self.assertEqual(self.pendientes(self.sub)['total'], 0)
+
+        self.escribir(self.sub, 'Den prioridad a este folio')
+        self.escribir(self.tecnico, 'Enterado')
+        self.assertEqual(self.pendientes(self.sub)['total'], 1)
+        self.assertEqual(self.pendientes(self.admin)['total'], 0)
+
+    def test_se_puede_conversar_en_un_folio_liquidado(self):
+        cerrado = liquidado('LIQ-CHAT', self.tecnico, self.evaluador)
+        url = reverse('incidente-mensajes', args=[cerrado.pk])
+        self.assertEqual(self.escribir(self.evaluador, 'Revisa el cierre', url).status_code,
+                         status.HTTP_201_CREATED)
+        cerrado.refresh_from_db()
+        self.assertEqual(cerrado.estatus, Incidente.Estatus.LIQUIDADO)

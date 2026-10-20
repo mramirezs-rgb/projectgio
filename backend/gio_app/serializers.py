@@ -2,11 +2,13 @@ from django.conf import settings
 from django.contrib.auth import get_user_model
 from rest_framework import serializers
 
-from .models import BitacoraIncidente, EvidenciaIncidente, Incidente, TurnoEvaluador
+from .models import BitacoraIncidente, EvidenciaIncidente, Incidente, MensajeFolio, TurnoEvaluador
 
 UsuarioGIO = get_user_model()
 
 FORMATOS_IMAGEN = ('JPEG', 'JPG', 'PNG', 'WEBP')
+
+MAX_CARACTERES_MENSAJE = 2000
 
 
 class EvidenciaIncidenteSerializer(serializers.ModelSerializer):
@@ -54,6 +56,26 @@ class BitacoraIncidenteSerializer(serializers.ModelSerializer):
 
     def get_usuario_nombre(self, obj):
         return obj.usuario.nombre_completo if obj.usuario else 'Sistema'
+
+
+class MensajeFolioSerializer(serializers.ModelSerializer):
+    texto = serializers.CharField(max_length=MAX_CARACTERES_MENSAJE, error_messages={
+        'blank': 'Escriba un mensaje.',
+        'max_length': f'El mensaje admite hasta {MAX_CARACTERES_MENSAJE} caracteres.',
+    })
+    autor_nombre = serializers.SerializerMethodField()
+    autor_rol = serializers.SerializerMethodField()
+
+    class Meta:
+        model = MensajeFolio
+        fields = ['id', 'texto', 'autor', 'autor_nombre', 'autor_rol', 'creado_en']
+        read_only_fields = ['autor', 'creado_en']
+
+    def get_autor_nombre(self, obj):
+        return obj.autor.nombre_completo if obj.autor else 'Usuario eliminado'
+
+    def get_autor_rol(self, obj):
+        return obj.autor.rol if obj.autor else ''
 
 
 class PermisosFolioMixin:

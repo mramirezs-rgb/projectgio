@@ -190,6 +190,8 @@ REST_FRAMEWORK = {
     'DEFAULT_THROTTLE_RATES': {
         'login': env('GIO_THROTTLE_LOGIN', '20/min'),
         'evidencia': env('GIO_THROTTLE_EVIDENCIA', '120/hour'),
+        # El chat abierto consulta mensajes nuevos cada 5 s; el margen cubre varias pestañas.
+        'chat': env('GIO_THROTTLE_CHAT', '120/min'),
     },
 }
 

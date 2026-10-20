@@ -278,6 +278,49 @@ class TurnoEvaluador(models.Model):
         return self.hora_fin < self.hora_inicio
 
 
+class MensajeFolio(models.Model):
+    """Mensaje del chat de un folio entre planta externa, planta interna y supervisión."""
+
+    incidente = models.ForeignKey(Incidente, on_delete=models.CASCADE, related_name='mensajes')
+    autor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
+                              null=True, blank=True, related_name='mensajes_folio')
+    texto = models.TextField()
+    creado_en = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'incidentes_mensajes'
+        ordering = ['id']
+        indexes = [models.Index(fields=['incidente', 'id'])]
+        verbose_name = 'mensaje'
+        verbose_name_plural = 'mensajes del chat'
+
+    def __str__(self):
+        return f'Mensaje {self.pk} — folio {self.incidente_id}'
+
+
+class LecturaChat(models.Model):
+    """Hasta qué mensaje leyó cada usuario el chat de un folio; el resto cuenta como no leído."""
+
+    incidente = models.ForeignKey(Incidente, on_delete=models.CASCADE, related_name='lecturas_chat')
+    usuario = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+                                related_name='lecturas_chat')
+    ultimo_leido = models.PositiveBigIntegerField(default=0)
+
+    class Meta:
+        db_table = 'incidentes_lecturas_chat'
+        verbose_name = 'lectura del chat'
+        verbose_name_plural = 'lecturas del chat'
+        constraints = [
+            models.UniqueConstraint(fields=['incidente', 'usuario'], name='lectura_unica_por_folio'),
+        ]
+
+    @classmethod
+    def marcar(cls, incidente, usuario, hasta):
+        """Avanza la lectura hasta el mensaje indicado; nunca la hace retroceder."""
+        lectura, _ = cls.objects.get_or_create(incidente=incidente, usuario=usuario)
+        cls.objects.filter(pk=lectura.pk, ultimo_leido__lt=hasta).update(ultimo_leido=hasta)
+
+
 class BitacoraIncidente(models.Model):
     class Accion(models.TextChoices):
         CREACION = 'CREACION', 'Creación'
