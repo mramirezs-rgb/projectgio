@@ -8,7 +8,7 @@ from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
-from ._sisa import leer_tabla, normalizar_telefono, primer_valor
+from ._sisa import es_cuenta_generica, leer_tabla, normalizar_telefono, primer_valor
 
 UsuarioGIO = get_user_model()
 
@@ -20,9 +20,10 @@ def sin_acentos(texto):
 
 
 def partir_nombre(nombre_completo):
+    """Las dos últimas palabras son los apellidos; las demás, el nombre."""
     partes = nombre_completo.split()
     if len(partes) >= 4:
-        return ' '.join(partes[:2]), ' '.join(partes[2:])
+        return ' '.join(partes[:-2]), ' '.join(partes[-2:])
     if len(partes) == 3:
         return partes[0], ' '.join(partes[1:])
     if len(partes) == 2:
@@ -59,6 +60,8 @@ class Command(BaseCommand):
                             help='Ejecuta las altas; sin este indicador solo se listan.')
         parser.add_argument('--area', default='', help='Área operativa a asignar a las altas.')
         parser.add_argument('--password', help='Contraseña inicial común (por defecto aleatoria).')
+        parser.add_argument('--excluir', action='append', default=[], metavar='TEXTO',
+                            help='Omite los nombres que contienen este texto; se puede repetir.')
 
     def handle(self, *args, **opciones):
         if opciones['archivo']:
@@ -78,9 +81,12 @@ class Command(BaseCommand):
                 if clave:
                     existentes.setdefault(clave, usuario)
 
+        excluir = [' '.join(texto.split()).upper() for texto in opciones['excluir'] if texto.strip()]
+
         # Nombre -> (rol, teléfono) para las altas; técnicos existentes a los que les falta teléfono.
         nuevos = {}
         por_completar = {}
+        omitidos = set()
         for ruta in rutas:
             marco = leer_tabla(ruta)
             for _, cruda in marco.iterrows():
@@ -95,6 +101,9 @@ class Command(BaseCommand):
                     nombre = ' '.join(nombre.split()).upper()
                     if not nombre:
                         continue
+                    if es_cuenta_generica(nombre) or any(texto in nombre for texto in excluir):
+                        omitidos.add(nombre)
+                        continue
                     usuario = existentes.get(nombre)
                     if usuario:
                         if telefono_fila and not usuario.telefono and usuario.es_tecnico:
@@ -103,6 +112,11 @@ class Command(BaseCommand):
                     if len(nombre.split()) >= 2:
                         rol_previo, telefono_previo = nuevos.get(nombre, (rol, ''))
                         nuevos[nombre] = (rol_previo, telefono_previo or telefono_fila)
+
+        if omitidos:
+            self.stdout.write(
+                f'{len(omitidos)} nombre(s) omitido(s) por ser cuentas de operadora o por '
+                f'--excluir: {", ".join(sorted(omitidos))}')
 
         if not nuevos and not por_completar:
             self.stdout.write(self.style.SUCCESS(

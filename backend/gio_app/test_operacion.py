@@ -429,6 +429,32 @@ class OquPlantaInternaTests(BaseGIOTestCase):
         self.assertEqual(nuevo.rol, UsuarioGIO.Rol.PI_EVALUADOR)
         self.assertTrue(nuevo.expediente.startswith('OQU-'))
 
+    def test_importar_tecnicos_omite_las_cuentas_de_operadora(self):
+        salida = correr_oqu('importar_tecnicos',
+                            '1,UNINET,PUEBLA,,CASPUE OPERADORA INTERNET\n'
+                            '2,UNINET,PUEBLA,,MERIDA OPERADORA TRANS\n'
+                            '3,UNINET,PUEBLA,,JUDITH DIAZ LOZANO\n', '--confirmar')
+        self.assertIn('2 nombre(s) omitido(s)', salida)
+        self.assertTrue(UsuarioGIO.objects.filter(first_name='JUDITH').exists())
+        self.assertFalse(UsuarioGIO.objects.filter(last_name__icontains='OPERADORA').exists())
+
+    def test_importar_tecnicos_excluye_los_nombres_indicados(self):
+        correr_oqu('importar_tecnicos', '1,UNINET,PUEBLA,,BUZON GENERAL SOPORTE\n',
+                   '--confirmar', '--excluir', 'buzon')
+        self.assertFalse(UsuarioGIO.objects.filter(first_name__icontains='BUZON').exists())
+
+    def test_importar_tecnicos_toma_las_dos_ultimas_palabras_como_apellidos(self):
+        correr_oqu('importar_tecnicos',
+                   '1,UNINET,PUEBLA,,MARIA MARTINA SILVIA JARAMILLO CORTEZ\n', '--confirmar')
+        nuevo = UsuarioGIO.objects.get(last_name='JARAMILLO CORTEZ')
+        self.assertEqual(nuevo.first_name, 'MARIA MARTINA SILVIA')
+
+    def test_ingesta_no_reporta_cuentas_de_operadora_en_oqu(self):
+        salida = correr_oqu('ingesta_sisa', '55500003,UNINET,PUEBLA,,CASPUE OPERADORA INTERNET\n',
+                            '--sin-mover')
+        self.assertNotIn('OPERADORA', salida)
+        self.assertIsNone(Incidente.objects.get(folio='55500003').evaluador)
+
 
 class ExportacionReporteTests(BaseGIOTestCase):
     url = reverse('incidente-exportar')

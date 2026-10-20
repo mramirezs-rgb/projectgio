@@ -15,6 +15,7 @@ from gio_app.models import BitacoraIncidente, Incidente
 from ._sisa import (
     a_fecha,
     entero,
+    es_cuenta_generica,
     folio_valido,
     leer_tabla,
     limpiar_central,
@@ -177,7 +178,8 @@ class Command(BaseCommand):
     def _resolver_evaluador(self, nombre):
         """La columna OQU trae al técnico de planta interna responsable del folio."""
         clave = ' '.join(nombre.split()).upper() if nombre else ''
-        if not clave:
+        # Las cuentas de operadora no son personas: el folio queda para el reparto por turnos.
+        if not clave or es_cuenta_generica(clave):
             return None, ''
         usuario = self._evaluadores().get(clave)
         return (usuario, '') if usuario else (None, clave)
