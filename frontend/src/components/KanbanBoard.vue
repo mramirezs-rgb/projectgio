@@ -1,7 +1,12 @@
 <script setup>
 import { ref } from 'vue'
-import { TRANSICIONES, etiquetaEstatus } from '../composables/useIncidentes.js'
+import { useAuth } from '../composables/useAuth.js'
+import { useChat } from '../composables/useChat.js'
+import { ESTATUS, TRANSICIONES, etiquetaEstatus } from '../composables/useIncidentes.js'
 import { formatearHoras } from '../utils/formato.js'
+
+const { esGerencia } = useAuth()
+const { sinLeerDe } = useChat()
 
 const props = defineProps({
   columnas: { type: Array, required: true },
@@ -13,7 +18,14 @@ const emit = defineEmits(['editar', 'mover', 'cargar-mas'])
 const arrastrado = ref(null)
 const columnaActiva = ref(null)
 
-const destinosValidos = (estatus) => TRANSICIONES[estatus] || []
+// Gerencia puede llevar un folio a Liquidado desde cualquier columna.
+const destinosValidos = (estatus) => {
+  const destinos = TRANSICIONES[estatus] || []
+  if (!esGerencia.value || estatus === ESTATUS.LIQUIDADO || destinos.includes(ESTATUS.LIQUIDADO)) {
+    return destinos
+  }
+  return [...destinos, ESTATUS.LIQUIDADO]
+}
 
 const iniciarArrastre = (evento, item) => {
   if (!props.puedeMover || item.bloqueado) return
@@ -108,6 +120,9 @@ const soltar = (evento, idColumna) => {
           <footer class="ficha__pie">
             <span class="ficha__servicio">{{ item.tipo_servicio || 'Servicio' }}</span>
             <span class="ficha__marcas">
+              <span v-if="sinLeerDe(item.id)" class="ficha__mensajes" title="Mensajes sin leer">
+                {{ sinLeerDe(item.id) }} msj
+              </span>
               <span v-if="item.total_evidencias" class="ficha__evidencias" title="Evidencias cargadas">
                 {{ item.total_evidencias }} ev.
               </span>
@@ -313,6 +328,13 @@ const soltar = (evento, idColumna) => {
 
 .ficha__evidencias {
   color: var(--indigo-texto);
+  font-weight: 700;
+}
+
+.ficha__mensajes {
+  padding: 0 6px;
+  background-color: var(--acento);
+  color: var(--sobre-acento);
   font-weight: 700;
 }
 

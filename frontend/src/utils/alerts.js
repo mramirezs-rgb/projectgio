@@ -103,6 +103,35 @@ export const notificar = (titulo, icono = 'success') =>
     timerProgressBar: true,
   })
 
+// Un aviso nuevo reemplazaría un diálogo abierto (por ejemplo, la confirmación de liquidar).
+export const hayDialogoAbierto = () =>
+  Swal.isVisible() && !Swal.getPopup()?.classList.contains('swal2-toast')
+
+// Aviso de mensaje nuevo en el chat: no bloquea la pantalla y al tocarlo lleva al chat.
+// Se usa titleText y text para que el contenido del mensaje nunca se interprete como HTML.
+export const avisarMensaje = (titulo, texto, alTocar) =>
+  GioSwal.fire({
+    toast: true,
+    position: 'top-end',
+    icon: 'info',
+    titleText: titulo,
+    text: texto,
+    showConfirmButton: false,
+    showCloseButton: true,
+    timer: 8000,
+    timerProgressBar: true,
+    didOpen: (aviso) => {
+      aviso.addEventListener('mouseenter', Swal.stopTimer)
+      aviso.addEventListener('mouseleave', Swal.resumeTimer)
+      aviso.style.cursor = 'pointer'
+      aviso.addEventListener('click', (evento) => {
+        if (evento.target.closest('.swal2-close')) return
+        Swal.close()
+        alTocar()
+      })
+    },
+  })
+
 function escapar(texto) {
   return String(texto)
     .replace(/&/g, '&amp;')

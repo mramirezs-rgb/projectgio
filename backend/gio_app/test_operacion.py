@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch
 
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.management import call_command
 from django.test import override_settings
 from django.urls import reverse
@@ -428,6 +429,32 @@ class OquPlantaInternaTests(BaseGIOTestCase):
         self.assertEqual(nuevo.rol, UsuarioGIO.Rol.PI_EVALUADOR)
         self.assertTrue(nuevo.expediente.startswith('OQU-'))
 
+    def test_importar_tecnicos_omite_las_cuentas_de_operadora(self):
+        salida = correr_oqu('importar_tecnicos',
+                            '1,UNINET,PUEBLA,,CASPUE OPERADORA INTERNET\n'
+                            '2,UNINET,PUEBLA,,MERIDA OPERADORA TRANS\n'
+                            '3,UNINET,PUEBLA,,JUDITH DIAZ LOZANO\n', '--confirmar')
+        self.assertIn('2 nombre(s) omitido(s)', salida)
+        self.assertTrue(UsuarioGIO.objects.filter(first_name='JUDITH').exists())
+        self.assertFalse(UsuarioGIO.objects.filter(last_name__icontains='OPERADORA').exists())
+
+    def test_importar_tecnicos_excluye_los_nombres_indicados(self):
+        correr_oqu('importar_tecnicos', '1,UNINET,PUEBLA,,BUZON GENERAL SOPORTE\n',
+                   '--confirmar', '--excluir', 'buzon')
+        self.assertFalse(UsuarioGIO.objects.filter(first_name__icontains='BUZON').exists())
+
+    def test_importar_tecnicos_toma_las_dos_ultimas_palabras_como_apellidos(self):
+        correr_oqu('importar_tecnicos',
+                   '1,UNINET,PUEBLA,,MARIA MARTINA SILVIA JARAMILLO CORTEZ\n', '--confirmar')
+        nuevo = UsuarioGIO.objects.get(last_name='JARAMILLO CORTEZ')
+        self.assertEqual(nuevo.first_name, 'MARIA MARTINA SILVIA')
+
+    def test_ingesta_no_reporta_cuentas_de_operadora_en_oqu(self):
+        salida = correr_oqu('ingesta_sisa', '55500003,UNINET,PUEBLA,,CASPUE OPERADORA INTERNET\n',
+                            '--sin-mover')
+        self.assertNotIn('OPERADORA', salida)
+        self.assertIsNone(Incidente.objects.get(folio='55500003').evaluador)
+
 
 class ExportacionReporteTests(BaseGIOTestCase):
     url = reverse('incidente-exportar')
@@ -511,3 +538,229 @@ class ExportacionReporteTests(BaseGIOTestCase):
             respuesta = self.client.get(self.url)
         self.assertEqual(respuesta.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn('máximo por reporte', str(respuesta.data['detail']))
+
+
+class ChatFolioTests(BaseGIOTestCase):
+    def setUp(self):
+        super().setUp()
+        self.url = reverse('incidente-mensajes', args=[self.propio.pk])
+        self.url_pendientes = reverse('incidente-pendientes-de-chat')
+
+    def escribir(self, usuario, texto, url=None):
+        self.autenticar(usuario)
+        return self.client.post(url or self.url, {'texto': texto}, format='json')
+
+    def pendientes(self, usuario):
+        self.autenticar(usuario)
+        return self.client.get(self.url_pendientes).data
+
+    def test_planta_externa_e_interna_conversan_en_el_folio(self):
+        respuesta = self.escribir(self.tecnico, '  Llegué al sitio, el par está mojado.  ')
+        self.assertEqual(respuesta.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(respuesta.data['texto'], 'Llegué al sitio, el par está mojado.')
+        self.assertEqual(respuesta.data['autor_rol'], UsuarioGIO.Rol.TECNICO)
+        self.escribir(self.evaluador, 'Enterado, veo el puerto caído en gestión.')
+
+        respuesta = self.client.get(self.url)
+        self.assertEqual([m['autor'] for m in respuesta.data],
+                         [self.tecnico.pk, self.evaluador.pk])
+        self.assertEqual(respuesta.data[1]['autor_nombre'], self.evaluador.nombre_completo)
+
+    def test_quien_no_ve_el_folio_no_ve_ni_escribe_en_su_chat(self):
+        self.escribir(self.tecnico, 'Mensaje interno del folio')
+        for usuario in (self.otro_tecnico, self.otro_evaluador):
+            self.autenticar(usuario)
+            self.assertEqual(self.client.get(self.url).status_code, status.HTTP_404_NOT_FOUND)
+            self.assertEqual(self.escribir(usuario, 'Hola').status_code,
+                             status.HTTP_404_NOT_FOUND)
+
+    def test_mensaje_vacio_o_demasiado_largo_se_rechaza(self):
+        self.assertEqual(self.escribir(self.tecnico, '   ').status_code,
+                         status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(self.escribir(self.tecnico, 'x' * 2001).status_code,
+                         status.HTTP_400_BAD_REQUEST)
+        self.assertFalse(self.propio.mensajes.exists())
+
+    def test_consulta_incremental_trae_solo_los_mensajes_nuevos(self):
+        primero = self.escribir(self.tecnico, 'Uno').data['id']
+        self.escribir(self.evaluador, 'Dos')
+        self.autenticar(self.tecnico)
+        respuesta = self.client.get(self.url, {'despues': primero})
+        self.assertEqual([m['texto'] for m in respuesta.data], ['Dos'])
+        self.assertEqual(self.client.get(self.url, {'despues': 'x'}).status_code,
+                         status.HTTP_400_BAD_REQUEST)
+
+    def test_avisa_de_mensajes_sin_leer_hasta_que_se_abre_el_chat(self):
+        self.escribir(self.tecnico, 'Necesito que liberen el puerto')
+        self.escribir(self.tecnico, 'Sigo en sitio')
+
+        avisos = self.pendientes(self.evaluador)
+        self.assertEqual(avisos['total'], 2)
+        self.assertEqual(avisos['por_folio'], {str(self.propio.pk): 2})
+        self.assertEqual(avisos['recientes'][0]['folio'], self.propio.folio)
+        self.assertEqual(avisos['recientes'][0]['ultimo']['texto'], 'Sigo en sitio')
+        self.assertEqual(self.pendientes(self.tecnico)['total'], 0)
+
+        self.autenticar(self.evaluador)
+        self.client.get(self.url)
+        self.assertEqual(self.pendientes(self.evaluador)['total'], 0)
+
+        self.escribir(self.tecnico, 'Ya quedó')
+        self.assertEqual(self.pendientes(self.evaluador)['total'], 1)
+
+    def test_supervision_solo_recibe_avisos_de_los_chats_en_que_participa(self):
+        self.escribir(self.tecnico, 'Reporte de avance')
+        self.assertEqual(self.pendientes(self.sub)['total'], 0)
+
+        self.escribir(self.sub, 'Den prioridad a este folio')
+        self.escribir(self.tecnico, 'Enterado')
+        self.assertEqual(self.pendientes(self.sub)['total'], 1)
+        self.assertEqual(self.pendientes(self.admin)['total'], 0)
+
+    def test_se_puede_conversar_en_un_folio_liquidado(self):
+        cerrado = liquidado('LIQ-CHAT', self.tecnico, self.evaluador)
+        url = reverse('incidente-mensajes', args=[cerrado.pk])
+        self.assertEqual(self.escribir(self.evaluador, 'Revisa el cierre', url).status_code,
+                         status.HTTP_201_CREATED)
+        cerrado.refresh_from_db()
+        self.assertEqual(cerrado.estatus, Incidente.Estatus.LIQUIDADO)
+
+
+class ChatFotosTests(BaseGIOTestCase):
+    def setUp(self):
+        super().setUp()
+        carpeta = tempfile.TemporaryDirectory()
+        self.addCleanup(carpeta.cleanup)
+        ajuste = override_settings(MEDIA_ROOT=carpeta.name, EVIDENCIA_MAX_BYTES=512 * 1024)
+        ajuste.enable()
+        self.addCleanup(ajuste.disable)
+        self.url = reverse('incidente-mensajes', args=[self.propio.pk])
+
+    def enviar(self, usuario, **datos):
+        self.autenticar(usuario)
+        return self.client.post(self.url, datos, format='multipart')
+
+    def test_planta_interna_y_externa_envian_fotos_con_o_sin_texto(self):
+        respuesta = self.enviar(self.tecnico, imagen=imagen_en_memoria(), texto='Así está el par')
+        self.assertEqual(respuesta.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(respuesta.data['texto'], 'Así está el par')
+        self.assertTrue(respuesta.data['imagen_url'].startswith('http://testserver/media/chat/'))
+        self.assertNotIn('imagen', respuesta.data)
+
+        respuesta = self.enviar(self.evaluador, imagen=imagen_en_memoria('gestion.png'))
+        self.assertEqual(respuesta.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(respuesta.data['texto'], '')
+
+        mensajes = self.client.get(self.url).data
+        self.assertTrue(all(m['imagen_url'] for m in mensajes))
+        self.assertFalse(self.propio.evidencias.exists())
+        self.assertGreater(self.propio.mensajes.first().tamano_bytes, 0)
+
+    def test_mensaje_sin_texto_ni_foto_se_rechaza(self):
+        respuesta = self.enviar(self.tecnico, texto='  ')
+        self.assertEqual(respuesta.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('texto', respuesta.data)
+
+    def test_archivo_que_no_es_imagen_se_rechaza(self):
+        archivo = SimpleUploadedFile('nota.jpg', b'no es una imagen', content_type='image/jpeg')
+        respuesta = self.enviar(self.tecnico, imagen=archivo)
+        self.assertEqual(respuesta.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('imagen', respuesta.data)
+
+    @override_settings(EVIDENCIA_MAX_BYTES=1024)
+    def test_foto_demasiado_pesada_se_rechaza(self):
+        grande = imagen_en_memoria(tamano=(900, 900), calidad=98)
+        respuesta = self.enviar(self.tecnico, imagen=grande)
+        self.assertEqual(respuesta.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('límite', str(respuesta.data['imagen']))
+        self.assertFalse(self.propio.mensajes.exists())
+
+    def test_el_aviso_indica_que_llego_una_foto(self):
+        self.enviar(self.tecnico, imagen=imagen_en_memoria())
+        self.autenticar(self.evaluador)
+        avisos = self.client.get(reverse('incidente-pendientes-de-chat')).data
+        self.assertEqual(avisos['recientes'][0]['ultimo']['texto'], 'Envió una foto')
+
+
+class LiquidacionPorGerenciaTests(BaseGIOTestCase):
+    def setUp(self):
+        super().setUp()
+        self.url = reverse('incidente-detail', args=[self.propio.pk])
+
+    def editar(self, usuario, datos, url=None):
+        self.autenticar(usuario)
+        return self.client.patch(url or self.url, datos, format='json')
+
+    def test_gerencia_liquida_desde_cualquier_estatus(self):
+        respuesta = self.editar(self.admin, {
+            'estatus': Incidente.Estatus.LIQUIDADO, 'diagnostico_final': 'Cerrado en SISA',
+        })
+        self.assertEqual(respuesta.status_code, status.HTTP_200_OK)
+        self.assertEqual(respuesta.data['estatus'], Incidente.Estatus.LIQUIDADO)
+        self.assertIsNotNone(respuesta.data['fecha_cierre'])
+
+        sin_tecnico = reverse('incidente-detail', args=[self.ajeno.pk])
+        self.ajeno.tecnico = None
+        self.ajeno.save()
+        respuesta = self.editar(self.admin, {
+            'estatus': Incidente.Estatus.LIQUIDADO, 'desc_liq': 'Servicio restablecido',
+        }, sin_tecnico)
+        self.assertEqual(respuesta.status_code, status.HTTP_200_OK)
+        self.assertEqual(respuesta.data['estatus'], Incidente.Estatus.LIQUIDADO)
+
+    def test_gerencia_necesita_diagnostico_o_descripcion_para_liquidar(self):
+        respuesta = self.editar(self.admin, {'estatus': Incidente.Estatus.LIQUIDADO})
+        self.assertEqual(respuesta.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('diagnostico_final', respuesta.data)
+
+    def test_al_escribir_la_descripcion_de_liquidacion_gerencia_liquida(self):
+        respuesta = self.editar(self.admin, {
+            'estatus': Incidente.Estatus.ASIGNADO, 'desc_liq': 'Se cambió la acometida',
+        })
+        self.assertEqual(respuesta.status_code, status.HTTP_200_OK)
+        self.assertEqual(respuesta.data['estatus'], Incidente.Estatus.LIQUIDADO)
+        registro = BitacoraIncidente.objects.get(
+            incidente=self.propio, accion=BitacoraIncidente.Accion.LIQUIDACION)
+        self.assertEqual(registro.valor_anterior, Incidente.Estatus.ASIGNADO)
+        self.assertIn('descripción de liquidación', registro.detalle)
+        self.assertEqual(registro.usuario, self.admin)
+
+    def test_si_gerencia_elige_otro_estatus_se_respeta(self):
+        respuesta = self.editar(self.admin, {
+            'estatus': Incidente.Estatus.EN_PROCESO, 'desc_liq': 'Pendiente de confirmar',
+        })
+        self.assertEqual(respuesta.data['estatus'], Incidente.Estatus.EN_PROCESO)
+
+    def test_una_descripcion_que_ya_estaba_no_liquida(self):
+        # La ingesta SISA puede traer la descripción; editar otro campo no debe liquidar.
+        self.propio.desc_liq = 'Texto de SISA'
+        self.propio.save()
+        respuesta = self.editar(self.admin, {
+            'desc_liq': 'Texto de SISA', 'obs_usuario': 'Revisado por Gerencia',
+        })
+        self.assertEqual(respuesta.data['estatus'], Incidente.Estatus.ASIGNADO)
+
+    def test_las_demas_areas_conservan_las_reglas(self):
+        for usuario in (self.sub, self.evaluador):
+            respuesta = self.editar(usuario, {'desc_liq': f'Descripción de {usuario.expediente}'})
+            self.assertEqual(respuesta.status_code, status.HTTP_200_OK)
+            self.assertEqual(respuesta.data['estatus'], Incidente.Estatus.ASIGNADO)
+        respuesta = self.editar(self.sub, {
+            'estatus': Incidente.Estatus.LIQUIDADO, 'diagnostico_final': 'Cerrado',
+        })
+        self.assertEqual(respuesta.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_solo_gerencia_ve_liquidado_entre_los_estatus_posibles(self):
+        self.autenticar(self.admin)
+        self.assertIn(Incidente.Estatus.LIQUIDADO, self.client.get(self.url).data['transiciones_validas'])
+        self.autenticar(self.sub)
+        self.assertNotIn(Incidente.Estatus.LIQUIDADO,
+                         self.client.get(self.url).data['transiciones_validas'])
+
+    def test_boton_liquidar_de_gerencia_acepta_solo_la_descripcion(self):
+        self.autenticar(self.admin)
+        respuesta = self.client.post(reverse('incidente-liquidar', args=[self.propio.pk]),
+                                     {'desc_liq': 'Restablecido'}, format='json')
+        self.assertEqual(respuesta.status_code, status.HTTP_200_OK)
+        self.assertEqual(respuesta.data['estatus'], Incidente.Estatus.LIQUIDADO)
+        self.assertEqual(respuesta.data['desc_liq'], 'Restablecido')

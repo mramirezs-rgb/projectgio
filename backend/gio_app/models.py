@@ -8,11 +8,19 @@ from django.db import models
 from django.utils import timezone
 
 
-def ruta_evidencia(instance, filename):
+def _ruta_de_imagen(carpeta, instance, filename):
     extension = (filename.rsplit('.', 1)[-1] or 'jpg').lower()[:5]
     folio = (instance.incidente.folio or 'sin-folio').replace('/', '-')
     fecha = timezone.now()
-    return f'evidencias/{fecha:%Y/%m}/{folio}/{uuid.uuid4().hex}.{extension}'
+    return f'{carpeta}/{fecha:%Y/%m}/{folio}/{uuid.uuid4().hex}.{extension}'
+
+
+def ruta_evidencia(instance, filename):
+    return _ruta_de_imagen('evidencias', instance, filename)
+
+
+def ruta_chat(instance, filename):
+    return _ruta_de_imagen('chat', instance, filename)
 
 
 class Incidente(models.Model):
@@ -186,13 +194,21 @@ class Incidente(models.Model):
             return 'alerta'
         return 'normal'
 
-    def transiciones_validas(self):
-        return sorted(self.TRANSICIONES.get(self.estatus, set()))
+    @staticmethod
+    def liquida_como_gerencia(usuario):
+        """Gerencia liquida desde cualquier estatus y le basta la descripción de liquidación."""
+        return bool(usuario and usuario.is_authenticated and usuario.es_admin)
 
-    def puede_transicionar_a(self, nuevo_estatus):
+    def transiciones_validas(self, usuario=None):
+        destinos = set(self.TRANSICIONES.get(self.estatus, set()))
+        if self.estatus != self.Estatus.LIQUIDADO and self.liquida_como_gerencia(usuario):
+            destinos.add(self.Estatus.LIQUIDADO)
+        return sorted(destinos)
+
+    def puede_transicionar_a(self, nuevo_estatus, usuario=None):
         if nuevo_estatus == self.estatus:
             return True
-        return nuevo_estatus in self.TRANSICIONES.get(self.estatus, set())
+        return nuevo_estatus in self.transiciones_validas(usuario)
 
     def bloqueado_para(self, usuario):
         """Un folio liquidado no se modifica, salvo por Gerencia."""
@@ -276,6 +292,59 @@ class TurnoEvaluador(models.Model):
     @property
     def cruza_medianoche(self):
         return self.hora_fin < self.hora_inicio
+
+
+class MensajeFolio(models.Model):
+    """Mensaje del chat de un folio entre planta externa, planta interna y supervisión.
+
+    Lleva texto, una foto o ambos. La foto queda en el chat y no cuenta como evidencia del folio.
+    """
+
+    incidente = models.ForeignKey(Incidente, on_delete=models.CASCADE, related_name='mensajes')
+    autor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
+                              null=True, blank=True, related_name='mensajes_folio')
+    texto = models.TextField(blank=True, default='')
+    imagen = models.ImageField(upload_to=ruta_chat, blank=True)
+    tamano_bytes = models.PositiveIntegerField(default=0)
+    creado_en = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'incidentes_mensajes'
+        ordering = ['id']
+        indexes = [models.Index(fields=['incidente', 'id'])]
+        verbose_name = 'mensaje'
+        verbose_name_plural = 'mensajes del chat'
+
+    def __str__(self):
+        return f'Mensaje {self.pk} — folio {self.incidente_id}'
+
+    def save(self, *args, **kwargs):
+        if self.imagen and not self.tamano_bytes:
+            self.tamano_bytes = getattr(self.imagen, 'size', 0) or 0
+        return super().save(*args, **kwargs)
+
+
+class LecturaChat(models.Model):
+    """Hasta qué mensaje leyó cada usuario el chat de un folio; el resto cuenta como no leído."""
+
+    incidente = models.ForeignKey(Incidente, on_delete=models.CASCADE, related_name='lecturas_chat')
+    usuario = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+                                related_name='lecturas_chat')
+    ultimo_leido = models.PositiveBigIntegerField(default=0)
+
+    class Meta:
+        db_table = 'incidentes_lecturas_chat'
+        verbose_name = 'lectura del chat'
+        verbose_name_plural = 'lecturas del chat'
+        constraints = [
+            models.UniqueConstraint(fields=['incidente', 'usuario'], name='lectura_unica_por_folio'),
+        ]
+
+    @classmethod
+    def marcar(cls, incidente, usuario, hasta):
+        """Avanza la lectura hasta el mensaje indicado; nunca la hace retroceder."""
+        lectura, _ = cls.objects.get_or_create(incidente=incidente, usuario=usuario)
+        cls.objects.filter(pk=lectura.pk, ultimo_leido__lt=hasta).update(ultimo_leido=hasta)
 
 
 class BitacoraIncidente(models.Model):

@@ -1,8 +1,11 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import ChatFolio from '../components/ChatFolio.vue'
 import DesempenoCampo from '../components/DesempenoCampo.vue'
 import EvidenciaUploader from '../components/EvidenciaUploader.vue'
 import { useAuth } from '../composables/useAuth.js'
+import { useChat } from '../composables/useChat.js'
 import { ESTATUS, etiquetaEstatus } from '../composables/useIncidentes.js'
 import {
   cancelarLiquidacion,
@@ -15,7 +18,10 @@ import {
 import { confirmarAccion, mostrarError, mostrarExito, notificar } from '../utils/alerts.js'
 import { formatearFecha, formatearHoras } from '../utils/formato.js'
 
+const route = useRoute()
+const router = useRouter()
 const { usuario, permisos } = useAuth()
+const { sinLeerDe } = useChat()
 
 // Gerencia y Subgerencia no atienden folios en campo: aquí ven el desempeño de sus técnicos.
 const supervision = computed(() => !!permisos.value.vision_global)
@@ -25,6 +31,7 @@ const problema = ref('')
 const folios = ref([])
 const expandido = ref(null)
 const evidencias = ref([])
+const chatAbierto = ref(false)
 const enviando = ref(false)
 const filtro = ref('activos')
 
@@ -58,11 +65,36 @@ const cargar = async () => {
   }
 }
 
-onMounted(() => {
-  if (!supervision.value) cargar()
+// La bandeja de mensajes llega con ?folio=<id>&chat=1 para abrir ese folio con su chat.
+const abrirDesdeAviso = async () => {
+  const id = Number(route.query.folio)
+  if (!id) return
+  const conChat = !!route.query.chat
+  router.replace({ query: {} })
+  const folio = folios.value.find((item) => item.id === id)
+  if (!folio) return
+  filtro.value = folio.estatus === ESTATUS.LIQUIDADO ? 'liquidados' : 'activos'
+  if (expandido.value !== id) await alternar(folio)
+  chatAbierto.value = conChat
+  await nextTick()
+  document.getElementById(`folio-${id}`)?.scrollIntoView({ block: 'start' })
+}
+
+onMounted(async () => {
+  if (supervision.value) return
+  await cargar()
+  abrirDesdeAviso()
 })
 
+watch(
+  () => route.query.folio,
+  (folio) => {
+    if (folio && folios.value.length) abrirDesdeAviso()
+  },
+)
+
 const alternar = async (folio) => {
+  chatAbierto.value = false
   if (expandido.value === folio.id) {
     expandido.value = null
     return
@@ -213,6 +245,7 @@ const mapa = (direccion) =>
     <ul v-else class="tarjetas">
       <li
         v-for="folio in visibles"
+        :id="`folio-${folio.id}`"
         :key="folio.id"
         class="tarjeta gio-panel"
         :class="`tarjeta--${folio.semaforo || 'normal'}`"
@@ -237,6 +270,9 @@ const mapa = (direccion) =>
             </span>
             <span v-if="folio.total_evidencias" class="tarjeta__evidencias">
               {{ folio.total_evidencias }} evidencia(s)
+            </span>
+            <span v-if="sinLeerDe(folio.id)" class="tarjeta__mensajes">
+              {{ sinLeerDe(folio.id) }} mensaje(s) nuevo(s)
             </span>
           </div>
           <p class="tarjeta__sitio">{{ folio.central || folio.area_operativa || 'Sin central' }}</p>
@@ -281,6 +317,19 @@ const mapa = (direccion) =>
           >
             Llamar a central: {{ folio.telefono_tecnico }}
           </a>
+
+          <button
+            type="button"
+            class="gio-boton gio-boton--secundario gio-boton--tactil"
+            :aria-expanded="chatAbierto"
+            @click="chatAbierto = !chatAbierto"
+          >
+            {{ chatAbierto ? 'Ocultar chat' : 'Chat con planta interna' }}
+            <span v-if="!chatAbierto && sinLeerDe(folio.id)" class="detalle__aviso">
+              {{ sinLeerDe(folio.id) }}
+            </span>
+          </button>
+          <ChatFolio v-if="chatAbierto" :incidente-id="folio.id" />
 
           <template v-if="folio.estatus === ESTATUS.ASIGNADO || folio.estatus === ESTATUS.PENDIENTE">
             <button
@@ -519,6 +568,27 @@ const mapa = (direccion) =>
   font-size: 0.72rem;
   color: var(--indigo-texto);
   font-weight: 700;
+}
+
+.tarjeta__mensajes {
+  padding: 0 6px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  background-color: var(--acento);
+  color: var(--sobre-acento);
+}
+
+.detalle__aviso {
+  display: inline-grid;
+  place-items: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: var(--radio-pildora);
+  background-color: var(--acento);
+  color: var(--sobre-acento);
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
 }
 
 .tarjeta__sitio {

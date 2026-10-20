@@ -5,10 +5,18 @@ from django.utils import timezone
 
 VACIOS = {'', 'NAN', 'NONE', 'NULL', 'N/A', 'NA', '-', '--', '---', '—'}
 
+# SISA pone en OQU cuentas de operadora (por ejemplo, CASPUE OPERADORA INTERNET); no son personas.
+PALABRAS_CUENTA_GENERICA = ('OPERADORA',)
+
 
 def normalizar_encabezado(valor):
     texto = unicodedata.normalize('NFD', str(valor)).encode('ascii', 'ignore').decode('utf-8')
     return ' '.join(texto.upper().split())
+
+
+def es_cuenta_generica(nombre):
+    palabras = normalizar_encabezado(nombre).split()
+    return any(palabra in palabras for palabra in PALABRAS_CUENTA_GENERICA)
 
 
 def texto(valor, maximo=None):

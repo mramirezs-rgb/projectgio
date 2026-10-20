@@ -1,7 +1,7 @@
 from django.contrib import admin
 from django.utils.html import format_html
 
-from .models import BitacoraIncidente, EvidenciaIncidente, Incidente
+from .models import BitacoraIncidente, EvidenciaIncidente, Incidente, MensajeFolio
 
 
 class EvidenciaInline(admin.TabularInline):
@@ -63,6 +63,23 @@ class BitacoraIncidenteAdmin(admin.ModelAdmin):
     list_filter = ('accion', 'registrado_en')
     search_fields = ('incidente__folio', 'detalle')
     readonly_fields = tuple(f.name for f in BitacoraIncidente._meta.fields)
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(MensajeFolio)
+class MensajeFolioAdmin(admin.ModelAdmin):
+    list_display = ('creado_en', 'incidente', 'autor', 'texto')
+    list_filter = ('creado_en',)
+    search_fields = ('incidente__folio', 'texto')
+    readonly_fields = tuple(f.name for f in MensajeFolio._meta.fields)
 
     def has_add_permission(self, request):
         return False

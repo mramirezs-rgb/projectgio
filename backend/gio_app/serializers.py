@@ -2,11 +2,37 @@ from django.conf import settings
 from django.contrib.auth import get_user_model
 from rest_framework import serializers
 
-from .models import BitacoraIncidente, EvidenciaIncidente, Incidente, TurnoEvaluador
+from .models import BitacoraIncidente, EvidenciaIncidente, Incidente, MensajeFolio, TurnoEvaluador
 
 UsuarioGIO = get_user_model()
 
 FORMATOS_IMAGEN = ('JPEG', 'JPG', 'PNG', 'WEBP')
+
+MAX_CARACTERES_MENSAJE = 2000
+
+
+def validar_imagen(archivo):
+    """Peso y formato de una foto de evidencia o del chat; el cliente ya la comprimió."""
+    if archivo.size > settings.EVIDENCIA_MAX_BYTES:
+        limite_kb = settings.EVIDENCIA_MAX_BYTES // 1024
+        raise serializers.ValidationError(
+            f'La imagen pesa {archivo.size // 1024} KB y el límite es {limite_kb} KB. '
+            'Debe comprimirse antes de enviarse.'
+        )
+    formato = str(getattr(archivo.image, 'format', '') or '').upper()
+    if formato not in FORMATOS_IMAGEN:
+        raise serializers.ValidationError('Formato no admitido. Use JPEG, PNG o WebP.')
+    return archivo
+
+
+def url_de_imagen(campo, peticion):
+    if not campo:
+        return None
+    return peticion.build_absolute_uri(campo.url) if peticion else campo.url
+
+
+def _texto(valor):
+    return (valor or '').strip()
 
 
 class EvidenciaIncidenteSerializer(serializers.ModelSerializer):
@@ -21,26 +47,13 @@ class EvidenciaIncidenteSerializer(serializers.ModelSerializer):
         extra_kwargs = {'imagen': {'write_only': True}}
 
     def get_imagen_url(self, obj):
-        if not obj.imagen:
-            return None
-        peticion = self.context.get('request')
-        url = obj.imagen.url
-        return peticion.build_absolute_uri(url) if peticion else url
+        return url_de_imagen(obj.imagen, self.context.get('request'))
 
     def get_subido_por_nombre(self, obj):
         return obj.subido_por.nombre_completo if obj.subido_por else 'Sin registro'
 
     def validate_imagen(self, archivo):
-        if archivo.size > settings.EVIDENCIA_MAX_BYTES:
-            limite_kb = settings.EVIDENCIA_MAX_BYTES // 1024
-            raise serializers.ValidationError(
-                f'La imagen pesa {archivo.size // 1024} KB y el límite es {limite_kb} KB. '
-                'Debe comprimirse antes de enviarse.'
-            )
-        formato = str(getattr(archivo.image, 'format', '') or '').upper()
-        if formato not in FORMATOS_IMAGEN:
-            raise serializers.ValidationError('Formato no admitido. Use JPEG, PNG o WebP.')
-        return archivo
+        return validar_imagen(archivo)
 
 
 class BitacoraIncidenteSerializer(serializers.ModelSerializer):
@@ -54,6 +67,42 @@ class BitacoraIncidenteSerializer(serializers.ModelSerializer):
 
     def get_usuario_nombre(self, obj):
         return obj.usuario.nombre_completo if obj.usuario else 'Sistema'
+
+
+class MensajeFolioSerializer(serializers.ModelSerializer):
+    texto = serializers.CharField(
+        max_length=MAX_CARACTERES_MENSAJE, required=False, allow_blank=True,
+        error_messages={
+            'max_length': f'El mensaje admite hasta {MAX_CARACTERES_MENSAJE} caracteres.',
+        },
+    )
+    imagen_url = serializers.SerializerMethodField()
+    autor_nombre = serializers.SerializerMethodField()
+    autor_rol = serializers.SerializerMethodField()
+
+    class Meta:
+        model = MensajeFolio
+        fields = ['id', 'texto', 'imagen', 'imagen_url', 'autor', 'autor_nombre', 'autor_rol',
+                  'creado_en']
+        read_only_fields = ['autor', 'creado_en']
+        extra_kwargs = {'imagen': {'write_only': True, 'required': False}}
+
+    def get_imagen_url(self, obj):
+        return url_de_imagen(obj.imagen, self.context.get('request'))
+
+    def get_autor_nombre(self, obj):
+        return obj.autor.nombre_completo if obj.autor else 'Usuario eliminado'
+
+    def get_autor_rol(self, obj):
+        return obj.autor.rol if obj.autor else ''
+
+    def validate_imagen(self, archivo):
+        return validar_imagen(archivo)
+
+    def validate(self, datos):
+        if not datos.get('texto') and not datos.get('imagen'):
+            raise serializers.ValidationError({'texto': 'Escriba un mensaje o adjunte una foto.'})
+        return datos
 
 
 class PermisosFolioMixin:
@@ -77,7 +126,7 @@ class IncidenteSerializer(PermisosFolioMixin, serializers.ModelSerializer):
     mttr_horas = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
     horas_abierto = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
     semaforo = serializers.CharField(read_only=True)
-    transiciones_validas = serializers.ListField(child=serializers.CharField(), read_only=True)
+    transiciones_validas = serializers.SerializerMethodField()
     evidencias = EvidenciaIncidenteSerializer(many=True, read_only=True)
     total_evidencias = serializers.IntegerField(source='evidencias.count', read_only=True)
     bloqueado = serializers.SerializerMethodField()
@@ -109,6 +158,9 @@ class IncidenteSerializer(PermisosFolioMixin, serializers.ModelSerializer):
     def get_evaluador_nombre(self, obj):
         return obj.evaluador.nombre_completo if obj.evaluador else 'Sin asignar'
 
+    def get_transiciones_validas(self, obj):
+        return obj.transiciones_validas(self._usuario())
+
     def validate_folio(self, valor):
         valor = (valor or '').strip()
         if not valor:
@@ -129,10 +181,23 @@ class IncidenteSerializer(PermisosFolioMixin, serializers.ModelSerializer):
 
     def validate(self, datos):
         instancia = self.instance
+        usuario = self._usuario()
+        gerencia = Incidente.liquida_como_gerencia(usuario)
         nuevo_estatus = datos.get('estatus', instancia.estatus if instancia else Incidente.Estatus.PENDIENTE)
 
-        if instancia and not instancia.puede_transicionar_a(nuevo_estatus):
-            permitidas = ', '.join(instancia.transiciones_validas()) or 'ninguna'
+        # Gerencia liquida el folio al escribir o cambiar la descripción de liquidación, salvo que
+        # en la misma edición elija otro estatus.
+        self.liquidacion_por_descripcion = bool(
+            gerencia and instancia
+            and instancia.estatus != Incidente.Estatus.LIQUIDADO
+            and nuevo_estatus == instancia.estatus
+            and _texto(datos.get('desc_liq')) not in ('', _texto(instancia.desc_liq))
+        )
+        if self.liquidacion_por_descripcion:
+            nuevo_estatus = datos['estatus'] = Incidente.Estatus.LIQUIDADO
+
+        if instancia and not instancia.puede_transicionar_a(nuevo_estatus, usuario):
+            permitidas = ', '.join(instancia.transiciones_validas(usuario)) or 'ninguna'
             raise serializers.ValidationError({
                 'estatus': f'Transición no permitida desde {instancia.estatus}. Permitidas: {permitidas}.'
             })
@@ -144,9 +209,14 @@ class IncidenteSerializer(PermisosFolioMixin, serializers.ModelSerializer):
             })
 
         if nuevo_estatus == Incidente.Estatus.LIQUIDADO:
-            diagnostico = datos.get('diagnostico_final',
-                                    instancia.diagnostico_final if instancia else '')
-            if not (diagnostico or '').strip():
+            diagnostico = _texto(datos.get('diagnostico_final',
+                                           instancia.diagnostico_final if instancia else ''))
+            descripcion = _texto(datos.get('desc_liq', instancia.desc_liq if instancia else ''))
+            if gerencia and not (diagnostico or descripcion):
+                raise serializers.ValidationError({'diagnostico_final': (
+                    'Indique el diagnóstico final o la descripción de liquidación para liquidar '
+                    'el folio.')})
+            if not gerencia and not diagnostico:
                 raise serializers.ValidationError({
                     'diagnostico_final': 'El diagnóstico final es obligatorio para liquidar el folio.'
                 })

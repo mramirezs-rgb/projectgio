@@ -1,6 +1,9 @@
 <script setup>
+import { useChat } from '../composables/useChat.js'
 import { etiquetaEstatus } from '../composables/useIncidentes.js'
 import { formatearFecha, formatearHoras } from '../utils/formato.js'
+
+const { sinLeerDe } = useChat()
 
 const props = defineProps({
   incidentes: { type: Array, default: () => [] },
@@ -107,6 +110,9 @@ const alternarTodo = (evento) => {
           <td>
             <span class="tabla__folio">{{ inc.folio }}</span>
             <small v-if="inc.referencia" class="tabla__sub">{{ inc.referencia }}</small>
+            <small v-if="sinLeerDe(inc.id)" class="tabla__mensajes">
+              {{ sinLeerDe(inc.id) }} mensaje(s) nuevo(s)
+            </small>
           </td>
           <td>
             <span class="tabla__fuerte">{{ inc.empresa || 'Sin empresa' }}</span>
@@ -245,6 +251,13 @@ const alternarTodo = (evento) => {
   display: block;
   color: var(--tenue);
   font-size: 0.7rem;
+}
+
+.tabla__mensajes {
+  display: block;
+  color: var(--acento-claro);
+  font-size: 0.7rem;
+  font-weight: 700;
 }
 
 .tabla__fecha {

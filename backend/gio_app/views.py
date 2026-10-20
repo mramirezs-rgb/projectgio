@@ -20,10 +20,13 @@ from usuarios.permissions import (
     PuedeAsignar, PuedeCrearIncidente, PuedeEditarIncidente, PuedeExportar,
 )
 
+from .chat import mensajes_pendientes
 from .desempeno import desempeno_de_campo
 from .exportacion import MAX_FILAS, generar_csv, generar_xlsx, nombre_de_archivo
 from .filters import IncidenteFilter
-from .models import BitacoraIncidente, EvidenciaIncidente, Incidente, TurnoEvaluador
+from .models import (
+    BitacoraIncidente, EvidenciaIncidente, Incidente, LecturaChat, TurnoEvaluador,
+)
 from .reparto import programar_turnos, repartir_folios_del_dia
 from .serializers import (
     AsignacionMasivaSerializer,
@@ -34,6 +37,7 @@ from .serializers import (
     IncidenteSerializer,
     IncidenteTecnicoSerializer,
     MAX_DIAS_PROGRAMACION,
+    MensajeFolioSerializer,
     ProgramarTurnosSerializer,
     RepartoTurnosSerializer,
     TurnoEvaluadorSerializer,
@@ -54,6 +58,9 @@ CAMPOS_AUDITADOS = (
 )
 
 MENSAJE_BLOQUEADO = 'El folio está liquidado y no admite cambios. Solo Gerencia puede modificarlo.'
+
+# Mensajes que trae la primera carga de un chat; después se piden solo los nuevos.
+MAX_MENSAJES_POR_CONSULTA = 200
 
 
 def queryset_por_rol(usuario):
@@ -118,7 +125,9 @@ class IncidenteViewSet(viewsets.ModelViewSet):
     def perform_update(self, serializer):
         anterior = {campo: getattr(serializer.instance, campo) for campo in CAMPOS_AUDITADOS}
         incidente = serializer.save()
-        self._auditar_cambios(incidente, anterior)
+        detalle = ('Liquidado por Gerencia al registrar la descripción de liquidación'
+                   if getattr(serializer, 'liquidacion_por_descripcion', False) else '')
+        self._auditar_cambios(incidente, anterior, detalle_estatus=detalle)
 
     def perform_destroy(self, instance):
         BitacoraIncidente.registrar(
@@ -127,22 +136,24 @@ class IncidenteViewSet(viewsets.ModelViewSet):
         )
         instance.delete()
 
-    def _auditar_cambios(self, incidente, anterior):
+    def _auditar_cambios(self, incidente, anterior, detalle_estatus=''):
         for campo, valor_anterior in anterior.items():
             valor_nuevo = getattr(incidente, campo)
             if valor_anterior == valor_nuevo:
                 continue
+            detalle = ''
             if campo == 'estatus':
                 accion = (BitacoraIncidente.Accion.LIQUIDACION
                           if valor_nuevo == Incidente.Estatus.LIQUIDADO
                           else BitacoraIncidente.Accion.CAMBIO_ESTATUS)
+                detalle = detalle_estatus
             elif campo in ('tecnico', 'evaluador'):
                 accion = BitacoraIncidente.Accion.ASIGNACION
             else:
                 accion = BitacoraIncidente.Accion.ACTUALIZACION
             BitacoraIncidente.registrar(
                 incidente, self.request.user, accion, campo=campo,
-                anterior=valor_anterior, nuevo=valor_nuevo,
+                anterior=valor_anterior, nuevo=valor_nuevo, detalle=detalle,
             )
 
     @action(detail=True, methods=['post'], url_path='liquidar')
@@ -150,19 +161,24 @@ class IncidenteViewSet(viewsets.ModelViewSet):
         incidente = self.get_object()
         if incidente.bloqueado_para(request.user):
             raise PermissionDenied(MENSAJE_BLOQUEADO)
+        gerencia = Incidente.liquida_como_gerencia(request.user)
         diagnostico = (request.data.get('diagnostico_final') or '').strip()
-        if not diagnostico:
+        descripcion = (request.data.get('desc_liq') or incidente.desc_liq or '').strip()
+        if gerencia and not (diagnostico or incidente.diagnostico_final.strip() or descripcion):
+            raise ValidationError({'diagnostico_final': (
+                'Indique el diagnóstico final o la descripción de liquidación.')})
+        if not gerencia and not diagnostico:
             raise ValidationError({'diagnostico_final': 'El diagnóstico final es obligatorio.'})
-        if not incidente.puede_transicionar_a(Incidente.Estatus.LIQUIDADO):
+        if not incidente.puede_transicionar_a(Incidente.Estatus.LIQUIDADO, request.user):
             raise ValidationError({
                 'estatus': f'El folio en estatus {incidente.estatus} no puede liquidarse directamente.'
             })
 
         estatus_anterior = incidente.estatus
         incidente.estatus = Incidente.Estatus.LIQUIDADO
-        incidente.diagnostico_final = diagnostico
+        incidente.diagnostico_final = diagnostico or incidente.diagnostico_final
         incidente.cve_liq = (request.data.get('cve_liq') or incidente.cve_liq or '').strip()
-        incidente.desc_liq = (request.data.get('desc_liq') or incidente.desc_liq or '').strip()
+        incidente.desc_liq = descripcion
         incidente.codigo_fallo = (request.data.get('codigo_fallo') or incidente.codigo_fallo or '')
         incidente.estado_enlace = request.data.get('estado_enlace') or Incidente.EstadoEnlace.UP
         incidente.exportado_sisa = False
@@ -228,6 +244,41 @@ class IncidenteViewSet(viewsets.ModelViewSet):
         incidente = self.get_object()
         serializer = BitacoraIncidenteSerializer(incidente.bitacora.all()[:200], many=True)
         return Response(serializer.data)
+
+    @action(detail=True, methods=['get', 'post'], url_path='mensajes', throttle_scope='chat')
+    def mensajes(self, request, pk=None):
+        """Chat del folio. GET devuelve los últimos mensajes, o con `despues` solo los posteriores
+        a ese id, y los marca como leídos para quien consulta. POST acepta JSON con `texto` o
+        multipart con `texto` e `imagen`. Admite mensajes aunque el folio esté liquidado: la
+        conversación no modifica el folio."""
+        incidente = self.get_object()
+        if request.method == 'POST':
+            contexto = {'request': request}
+            serializer = MensajeFolioSerializer(data=request.data, context=contexto)
+            serializer.is_valid(raise_exception=True)
+            mensaje = serializer.save(incidente=incidente, autor=request.user)
+            LecturaChat.marcar(incidente, request.user, mensaje.pk)
+            return Response(MensajeFolioSerializer(mensaje, context=contexto).data,
+                            status=status.HTTP_201_CREATED)
+
+        consulta = incidente.mensajes.select_related('autor')
+        despues = request.query_params.get('despues')
+        if despues:
+            try:
+                consulta = consulta.filter(pk__gt=int(despues))
+            except ValueError:
+                raise ValidationError({'despues': 'Indique el id del último mensaje recibido.'})
+            mensajes = list(consulta[:MAX_MENSAJES_POR_CONSULTA])
+        else:
+            mensajes = list(consulta.order_by('-id')[:MAX_MENSAJES_POR_CONSULTA])[::-1]
+        if mensajes:
+            LecturaChat.marcar(incidente, request.user, mensajes[-1].pk)
+        return Response(MensajeFolioSerializer(mensajes, many=True,
+                                               context={'request': request}).data)
+
+    @action(detail=False, methods=['get'], url_path='mensajes-pendientes')
+    def pendientes_de_chat(self, request):
+        return Response(mensajes_pendientes(request.user, self.get_queryset()))
 
     @action(detail=False, methods=['post'], url_path='asignar-masivo',
             permission_classes=[PuedeAsignar])

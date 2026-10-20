@@ -1,13 +1,21 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import AvisosChat from './components/AvisosChat.vue'
 import BotonTema from './components/BotonTema.vue'
 import { ROLES, useAuth } from './composables/useAuth.js'
+import { detenerAvisosDeChat, iniciarAvisosDeChat } from './composables/useChat.js'
 import { confirmarAccion } from './utils/alerts.js'
 
 const route = useRoute()
 const router = useRouter()
 const { estaAutenticado, usuario, rol, permisos, cerrarSesion } = useAuth()
+
+watch(
+  estaAutenticado,
+  (activo) => (activo ? iniciarAvisosDeChat() : detenerAvisosDeChat()),
+  { immediate: true },
+)
 
 const ETIQUETAS_ROL = {
   [ROLES.TECNICO]: 'Técnico de planta externa',
@@ -62,6 +70,7 @@ const salir = async () => {
           <span class="barra__nombre">{{ usuario?.nombre || usuario?.expediente }}</span>
           <span class="barra__rol">{{ ETIQUETAS_ROL[rol] || rol }}</span>
         </div>
+        <AvisosChat />
         <BotonTema />
         <button type="button" class="gio-boton gio-boton--secundario" @click="salir">Salir</button>
       </div>
