@@ -1,9 +1,11 @@
 <script setup>
 import { ref } from 'vue'
+import { useAuth } from '../composables/useAuth.js'
 import { useChat } from '../composables/useChat.js'
-import { TRANSICIONES, etiquetaEstatus } from '../composables/useIncidentes.js'
+import { ESTATUS, TRANSICIONES, etiquetaEstatus } from '../composables/useIncidentes.js'
 import { formatearHoras } from '../utils/formato.js'
 
+const { esGerencia } = useAuth()
 const { sinLeerDe } = useChat()
 
 const props = defineProps({
@@ -16,7 +18,14 @@ const emit = defineEmits(['editar', 'mover', 'cargar-mas'])
 const arrastrado = ref(null)
 const columnaActiva = ref(null)
 
-const destinosValidos = (estatus) => TRANSICIONES[estatus] || []
+// Gerencia puede llevar un folio a Liquidado desde cualquier columna.
+const destinosValidos = (estatus) => {
+  const destinos = TRANSICIONES[estatus] || []
+  if (!esGerencia.value || estatus === ESTATUS.LIQUIDADO || destinos.includes(ESTATUS.LIQUIDADO)) {
+    return destinos
+  }
+  return [...destinos, ESTATUS.LIQUIDADO]
+}
 
 const iniciarArrastre = (evento, item) => {
   if (!props.puedeMover || item.bloqueado) return

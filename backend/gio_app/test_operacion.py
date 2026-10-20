@@ -654,3 +654,87 @@ class ChatFotosTests(BaseGIOTestCase):
         self.autenticar(self.evaluador)
         avisos = self.client.get(reverse('incidente-pendientes-de-chat')).data
         self.assertEqual(avisos['recientes'][0]['ultimo']['texto'], 'Envió una foto')
+
+
+class LiquidacionPorGerenciaTests(BaseGIOTestCase):
+    def setUp(self):
+        super().setUp()
+        self.url = reverse('incidente-detail', args=[self.propio.pk])
+
+    def editar(self, usuario, datos, url=None):
+        self.autenticar(usuario)
+        return self.client.patch(url or self.url, datos, format='json')
+
+    def test_gerencia_liquida_desde_cualquier_estatus(self):
+        respuesta = self.editar(self.admin, {
+            'estatus': Incidente.Estatus.LIQUIDADO, 'diagnostico_final': 'Cerrado en SISA',
+        })
+        self.assertEqual(respuesta.status_code, status.HTTP_200_OK)
+        self.assertEqual(respuesta.data['estatus'], Incidente.Estatus.LIQUIDADO)
+        self.assertIsNotNone(respuesta.data['fecha_cierre'])
+
+        sin_tecnico = reverse('incidente-detail', args=[self.ajeno.pk])
+        self.ajeno.tecnico = None
+        self.ajeno.save()
+        respuesta = self.editar(self.admin, {
+            'estatus': Incidente.Estatus.LIQUIDADO, 'desc_liq': 'Servicio restablecido',
+        }, sin_tecnico)
+        self.assertEqual(respuesta.status_code, status.HTTP_200_OK)
+        self.assertEqual(respuesta.data['estatus'], Incidente.Estatus.LIQUIDADO)
+
+    def test_gerencia_necesita_diagnostico_o_descripcion_para_liquidar(self):
+        respuesta = self.editar(self.admin, {'estatus': Incidente.Estatus.LIQUIDADO})
+        self.assertEqual(respuesta.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('diagnostico_final', respuesta.data)
+
+    def test_al_escribir_la_descripcion_de_liquidacion_gerencia_liquida(self):
+        respuesta = self.editar(self.admin, {
+            'estatus': Incidente.Estatus.ASIGNADO, 'desc_liq': 'Se cambió la acometida',
+        })
+        self.assertEqual(respuesta.status_code, status.HTTP_200_OK)
+        self.assertEqual(respuesta.data['estatus'], Incidente.Estatus.LIQUIDADO)
+        registro = BitacoraIncidente.objects.get(
+            incidente=self.propio, accion=BitacoraIncidente.Accion.LIQUIDACION)
+        self.assertEqual(registro.valor_anterior, Incidente.Estatus.ASIGNADO)
+        self.assertIn('descripción de liquidación', registro.detalle)
+        self.assertEqual(registro.usuario, self.admin)
+
+    def test_si_gerencia_elige_otro_estatus_se_respeta(self):
+        respuesta = self.editar(self.admin, {
+            'estatus': Incidente.Estatus.EN_PROCESO, 'desc_liq': 'Pendiente de confirmar',
+        })
+        self.assertEqual(respuesta.data['estatus'], Incidente.Estatus.EN_PROCESO)
+
+    def test_una_descripcion_que_ya_estaba_no_liquida(self):
+        # La ingesta SISA puede traer la descripción; editar otro campo no debe liquidar.
+        self.propio.desc_liq = 'Texto de SISA'
+        self.propio.save()
+        respuesta = self.editar(self.admin, {
+            'desc_liq': 'Texto de SISA', 'obs_usuario': 'Revisado por Gerencia',
+        })
+        self.assertEqual(respuesta.data['estatus'], Incidente.Estatus.ASIGNADO)
+
+    def test_las_demas_areas_conservan_las_reglas(self):
+        for usuario in (self.sub, self.evaluador):
+            respuesta = self.editar(usuario, {'desc_liq': f'Descripción de {usuario.expediente}'})
+            self.assertEqual(respuesta.status_code, status.HTTP_200_OK)
+            self.assertEqual(respuesta.data['estatus'], Incidente.Estatus.ASIGNADO)
+        respuesta = self.editar(self.sub, {
+            'estatus': Incidente.Estatus.LIQUIDADO, 'diagnostico_final': 'Cerrado',
+        })
+        self.assertEqual(respuesta.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_solo_gerencia_ve_liquidado_entre_los_estatus_posibles(self):
+        self.autenticar(self.admin)
+        self.assertIn(Incidente.Estatus.LIQUIDADO, self.client.get(self.url).data['transiciones_validas'])
+        self.autenticar(self.sub)
+        self.assertNotIn(Incidente.Estatus.LIQUIDADO,
+                         self.client.get(self.url).data['transiciones_validas'])
+
+    def test_boton_liquidar_de_gerencia_acepta_solo_la_descripcion(self):
+        self.autenticar(self.admin)
+        respuesta = self.client.post(reverse('incidente-liquidar', args=[self.propio.pk]),
+                                     {'desc_liq': 'Restablecido'}, format='json')
+        self.assertEqual(respuesta.status_code, status.HTTP_200_OK)
+        self.assertEqual(respuesta.data['estatus'], Incidente.Estatus.LIQUIDADO)
+        self.assertEqual(respuesta.data['desc_liq'], 'Restablecido')

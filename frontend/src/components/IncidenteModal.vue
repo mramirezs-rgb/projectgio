@@ -84,13 +84,47 @@ const puedeCargarEvidencia = computed(
 
 const estatusOriginal = computed(() => props.modelo?.estatus || ESTATUS.PENDIENTE)
 
+// Gerencia liquida desde cualquier estatus y le basta el diagnóstico o la descripción de liquidación.
+const esGerencia = computed(() => props.rol === 'ADMIN')
+const textoDe = (valor) => String(valor || '').trim()
+
 const estatusDisponibles = computed(() => {
   if (!props.editando) return [ESTATUS.PENDIENTE]
-  const permitidos = props.modelo?.transiciones_validas?.length
-    ? props.modelo.transiciones_validas
-    : TRANSICIONES[estatusOriginal.value] || []
+  const permitidos = new Set(
+    props.modelo?.transiciones_validas?.length
+      ? props.modelo.transiciones_validas
+      : TRANSICIONES[estatusOriginal.value] || [],
+  )
+  if (esGerencia.value && estatusOriginal.value !== ESTATUS.LIQUIDADO) {
+    permitidos.add(ESTATUS.LIQUIDADO)
+  }
   return [estatusOriginal.value, ...permitidos]
 })
+
+// Igual que el servidor: si Gerencia escribe o cambia la descripción de liquidación sin elegir
+// otro estatus, al guardar el folio se liquida.
+const liquidaAlGuardar = computed(() => {
+  if (!props.editando || estatusOriginal.value === ESTATUS.LIQUIDADO) return false
+  if (form.value.estatus === ESTATUS.LIQUIDADO) return true
+  const descripcion = textoDe(form.value.desc_liq)
+  return (
+    esGerencia.value &&
+    form.value.estatus === estatusOriginal.value &&
+    descripcion !== '' &&
+    descripcion !== textoDe(props.modelo?.desc_liq)
+  )
+})
+
+const faltaTextoParaLiquidar = () => {
+  const diagnostico = textoDe(form.value.diagnostico_final)
+  return esGerencia.value ? !(diagnostico || textoDe(form.value.desc_liq)) : !diagnostico
+}
+
+const mensajeFaltaTexto = computed(() =>
+  esGerencia.value
+    ? 'Indique el diagnóstico final o la descripción de liquidación para liquidar.'
+    : 'El diagnóstico final es obligatorio para liquidar.',
+)
 
 const todasLasAreas = computed(() => {
   const nombres = props.areas.map((item) => item.nombre || item).filter(Boolean)
@@ -109,8 +143,9 @@ const centralesDisponibles = computed(() => {
 const puedeLiquidarAhora = computed(
   () =>
     props.editando &&
-    estatusOriginal.value === ESTATUS.EN_PROCESO &&
-    puedeEditarLiquidacion.value,
+    puedeEditarLiquidacion.value &&
+    (estatusOriginal.value === ESTATUS.EN_PROCESO ||
+      (esGerencia.value && estatusOriginal.value !== ESTATUS.LIQUIDADO)),
 )
 
 const idDe = (valor) => {
@@ -183,8 +218,8 @@ const validar = () => {
   ) {
     fallos.tecnico = 'Asigne un técnico antes de mover el folio a este estatus.'
   }
-  if (destino === ESTATUS.LIQUIDADO && !String(form.value.diagnostico_final || '').trim()) {
-    fallos.diagnostico_final = 'El diagnóstico final es obligatorio para liquidar.'
+  if ((destino === ESTATUS.LIQUIDADO || liquidaAlGuardar.value) && faltaTextoParaLiquidar()) {
+    fallos.diagnostico_final = mensajeFaltaTexto.value
   }
 
   errores.value = fallos
@@ -207,14 +242,14 @@ const guardar = () => {
 }
 
 const liquidar = () => {
-  if (!String(form.value.diagnostico_final || '').trim()) {
-    errores.value = { diagnostico_final: 'El diagnóstico final es obligatorio para liquidar.' }
+  if (faltaTextoParaLiquidar()) {
+    errores.value = { diagnostico_final: mensajeFaltaTexto.value }
     tabActiva.value = 'liquidacion'
     return
   }
   emit('liquidar', {
     id: props.modelo.id,
-    diagnostico_final: String(form.value.diagnostico_final).trim(),
+    diagnostico_final: textoDe(form.value.diagnostico_final),
     cve_liq: form.value.cve_liq || '',
     desc_liq: form.value.desc_liq || '',
     codigo_fallo: form.value.codigo_fallo || '',
@@ -556,10 +591,20 @@ onUnmounted(() => document.removeEventListener('keydown', alPulsarTecla))
               type="text"
               :disabled="!puedeEditarLiquidacion"
             />
+            <small
+              v-if="esGerencia && editando && estatusOriginal !== ESTATUS.LIQUIDADO"
+              class="campo__pista"
+            >
+              Si escribe o cambia esta descripción, el folio se liquida al guardar.
+            </small>
           </div>
           <div class="campo campo--ancho">
             <label class="gio-etiqueta" for="diagnostico">
-              Diagnóstico final (obligatorio para liquidar)
+              {{
+                esGerencia
+                  ? 'Diagnóstico final (o descripción de liquidación, para liquidar)'
+                  : 'Diagnóstico final (obligatorio para liquidar)'
+              }}
             </label>
             <textarea
               id="diagnostico"
@@ -639,7 +684,15 @@ onUnmounted(() => document.removeEventListener('keydown', alPulsarTecla))
             Cancelar liquidación
           </button>
           <button v-if="!bloqueado" type="submit" class="gio-boton gio-boton--primario" :disabled="guardando">
-            {{ guardando ? 'Guardando…' : editando ? 'Guardar cambios' : 'Crear folio' }}
+            {{
+              guardando
+                ? 'Guardando…'
+                : !editando
+                  ? 'Crear folio'
+                  : liquidaAlGuardar
+                    ? 'Guardar y liquidar'
+                    : 'Guardar cambios'
+            }}
           </button>
         </footer>
       </form>

@@ -31,6 +31,10 @@ def url_de_imagen(campo, peticion):
     return peticion.build_absolute_uri(campo.url) if peticion else campo.url
 
 
+def _texto(valor):
+    return (valor or '').strip()
+
+
 class EvidenciaIncidenteSerializer(serializers.ModelSerializer):
     imagen_url = serializers.SerializerMethodField()
     subido_por_nombre = serializers.SerializerMethodField()
@@ -122,7 +126,7 @@ class IncidenteSerializer(PermisosFolioMixin, serializers.ModelSerializer):
     mttr_horas = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
     horas_abierto = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
     semaforo = serializers.CharField(read_only=True)
-    transiciones_validas = serializers.ListField(child=serializers.CharField(), read_only=True)
+    transiciones_validas = serializers.SerializerMethodField()
     evidencias = EvidenciaIncidenteSerializer(many=True, read_only=True)
     total_evidencias = serializers.IntegerField(source='evidencias.count', read_only=True)
     bloqueado = serializers.SerializerMethodField()
@@ -154,6 +158,9 @@ class IncidenteSerializer(PermisosFolioMixin, serializers.ModelSerializer):
     def get_evaluador_nombre(self, obj):
         return obj.evaluador.nombre_completo if obj.evaluador else 'Sin asignar'
 
+    def get_transiciones_validas(self, obj):
+        return obj.transiciones_validas(self._usuario())
+
     def validate_folio(self, valor):
         valor = (valor or '').strip()
         if not valor:
@@ -174,10 +181,23 @@ class IncidenteSerializer(PermisosFolioMixin, serializers.ModelSerializer):
 
     def validate(self, datos):
         instancia = self.instance
+        usuario = self._usuario()
+        gerencia = Incidente.liquida_como_gerencia(usuario)
         nuevo_estatus = datos.get('estatus', instancia.estatus if instancia else Incidente.Estatus.PENDIENTE)
 
-        if instancia and not instancia.puede_transicionar_a(nuevo_estatus):
-            permitidas = ', '.join(instancia.transiciones_validas()) or 'ninguna'
+        # Gerencia liquida el folio al escribir o cambiar la descripción de liquidación, salvo que
+        # en la misma edición elija otro estatus.
+        self.liquidacion_por_descripcion = bool(
+            gerencia and instancia
+            and instancia.estatus != Incidente.Estatus.LIQUIDADO
+            and nuevo_estatus == instancia.estatus
+            and _texto(datos.get('desc_liq')) not in ('', _texto(instancia.desc_liq))
+        )
+        if self.liquidacion_por_descripcion:
+            nuevo_estatus = datos['estatus'] = Incidente.Estatus.LIQUIDADO
+
+        if instancia and not instancia.puede_transicionar_a(nuevo_estatus, usuario):
+            permitidas = ', '.join(instancia.transiciones_validas(usuario)) or 'ninguna'
             raise serializers.ValidationError({
                 'estatus': f'Transición no permitida desde {instancia.estatus}. Permitidas: {permitidas}.'
             })
@@ -189,9 +209,14 @@ class IncidenteSerializer(PermisosFolioMixin, serializers.ModelSerializer):
             })
 
         if nuevo_estatus == Incidente.Estatus.LIQUIDADO:
-            diagnostico = datos.get('diagnostico_final',
-                                    instancia.diagnostico_final if instancia else '')
-            if not (diagnostico or '').strip():
+            diagnostico = _texto(datos.get('diagnostico_final',
+                                           instancia.diagnostico_final if instancia else ''))
+            descripcion = _texto(datos.get('desc_liq', instancia.desc_liq if instancia else ''))
+            if gerencia and not (diagnostico or descripcion):
+                raise serializers.ValidationError({'diagnostico_final': (
+                    'Indique el diagnóstico final o la descripción de liquidación para liquidar '
+                    'el folio.')})
+            if not gerencia and not diagnostico:
                 raise serializers.ValidationError({
                     'diagnostico_final': 'El diagnóstico final es obligatorio para liquidar el folio.'
                 })

@@ -194,13 +194,21 @@ class Incidente(models.Model):
             return 'alerta'
         return 'normal'
 
-    def transiciones_validas(self):
-        return sorted(self.TRANSICIONES.get(self.estatus, set()))
+    @staticmethod
+    def liquida_como_gerencia(usuario):
+        """Gerencia liquida desde cualquier estatus y le basta la descripción de liquidación."""
+        return bool(usuario and usuario.is_authenticated and usuario.es_admin)
 
-    def puede_transicionar_a(self, nuevo_estatus):
+    def transiciones_validas(self, usuario=None):
+        destinos = set(self.TRANSICIONES.get(self.estatus, set()))
+        if self.estatus != self.Estatus.LIQUIDADO and self.liquida_como_gerencia(usuario):
+            destinos.add(self.Estatus.LIQUIDADO)
+        return sorted(destinos)
+
+    def puede_transicionar_a(self, nuevo_estatus, usuario=None):
         if nuevo_estatus == self.estatus:
             return True
-        return nuevo_estatus in self.TRANSICIONES.get(self.estatus, set())
+        return nuevo_estatus in self.transiciones_validas(usuario)
 
     def bloqueado_para(self, usuario):
         """Un folio liquidado no se modifica, salvo por Gerencia."""

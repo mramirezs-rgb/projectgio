@@ -125,7 +125,9 @@ class IncidenteViewSet(viewsets.ModelViewSet):
     def perform_update(self, serializer):
         anterior = {campo: getattr(serializer.instance, campo) for campo in CAMPOS_AUDITADOS}
         incidente = serializer.save()
-        self._auditar_cambios(incidente, anterior)
+        detalle = ('Liquidado por Gerencia al registrar la descripción de liquidación'
+                   if getattr(serializer, 'liquidacion_por_descripcion', False) else '')
+        self._auditar_cambios(incidente, anterior, detalle_estatus=detalle)
 
     def perform_destroy(self, instance):
         BitacoraIncidente.registrar(
@@ -134,22 +136,24 @@ class IncidenteViewSet(viewsets.ModelViewSet):
         )
         instance.delete()
 
-    def _auditar_cambios(self, incidente, anterior):
+    def _auditar_cambios(self, incidente, anterior, detalle_estatus=''):
         for campo, valor_anterior in anterior.items():
             valor_nuevo = getattr(incidente, campo)
             if valor_anterior == valor_nuevo:
                 continue
+            detalle = ''
             if campo == 'estatus':
                 accion = (BitacoraIncidente.Accion.LIQUIDACION
                           if valor_nuevo == Incidente.Estatus.LIQUIDADO
                           else BitacoraIncidente.Accion.CAMBIO_ESTATUS)
+                detalle = detalle_estatus
             elif campo in ('tecnico', 'evaluador'):
                 accion = BitacoraIncidente.Accion.ASIGNACION
             else:
                 accion = BitacoraIncidente.Accion.ACTUALIZACION
             BitacoraIncidente.registrar(
                 incidente, self.request.user, accion, campo=campo,
-                anterior=valor_anterior, nuevo=valor_nuevo,
+                anterior=valor_anterior, nuevo=valor_nuevo, detalle=detalle,
             )
 
     @action(detail=True, methods=['post'], url_path='liquidar')
@@ -157,19 +161,24 @@ class IncidenteViewSet(viewsets.ModelViewSet):
         incidente = self.get_object()
         if incidente.bloqueado_para(request.user):
             raise PermissionDenied(MENSAJE_BLOQUEADO)
+        gerencia = Incidente.liquida_como_gerencia(request.user)
         diagnostico = (request.data.get('diagnostico_final') or '').strip()
-        if not diagnostico:
+        descripcion = (request.data.get('desc_liq') or incidente.desc_liq or '').strip()
+        if gerencia and not (diagnostico or incidente.diagnostico_final.strip() or descripcion):
+            raise ValidationError({'diagnostico_final': (
+                'Indique el diagnóstico final o la descripción de liquidación.')})
+        if not gerencia and not diagnostico:
             raise ValidationError({'diagnostico_final': 'El diagnóstico final es obligatorio.'})
-        if not incidente.puede_transicionar_a(Incidente.Estatus.LIQUIDADO):
+        if not incidente.puede_transicionar_a(Incidente.Estatus.LIQUIDADO, request.user):
             raise ValidationError({
                 'estatus': f'El folio en estatus {incidente.estatus} no puede liquidarse directamente.'
             })
 
         estatus_anterior = incidente.estatus
         incidente.estatus = Incidente.Estatus.LIQUIDADO
-        incidente.diagnostico_final = diagnostico
+        incidente.diagnostico_final = diagnostico or incidente.diagnostico_final
         incidente.cve_liq = (request.data.get('cve_liq') or incidente.cve_liq or '').strip()
-        incidente.desc_liq = (request.data.get('desc_liq') or incidente.desc_liq or '').strip()
+        incidente.desc_liq = descripcion
         incidente.codigo_fallo = (request.data.get('codigo_fallo') or incidente.codigo_fallo or '')
         incidente.estado_enlace = request.data.get('estado_enlace') or Incidente.EstadoEnlace.UP
         incidente.exportado_sisa = False

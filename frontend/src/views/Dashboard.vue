@@ -204,7 +204,11 @@ const guardar = async (datos) => {
     if (editando.value) {
       const { data } = await updateIncidente(datos.id, datos)
       reemplazarIncidente(data)
-      notificar('Folio actualizado')
+      if (data.estatus === ESTATUS.LIQUIDADO && formActual.value.estatus !== ESTATUS.LIQUIDADO) {
+        mostrarExito('Folio liquidado', `MTTR registrado: ${formatearHoras(data.mttr_horas)}.`)
+      } else {
+        notificar('Folio actualizado')
+      }
     } else {
       await createIncidente(datos)
       mostrarExito('Folio creado', `El folio ${datos.folio} quedó registrado como pendiente.`)
@@ -234,10 +238,14 @@ const liquidar = async (datos) => {
 
 const moverEnTablero = async ({ incidente, estatus }) => {
   if (estatus === ESTATUS.LIQUIDADO) {
-    abrirEditar(incidente)
+    abrirEditar(incidente, 'liquidacion')
     mostrarAdvertencia(
       'Liquidación del folio',
-      'Para liquidar un folio se requiere el diagnóstico final. La evidencia fotográfica es opcional.',
+      esGerencia.value
+        ? 'Escriba el diagnóstico final o la descripción de liquidación y guarde. ' +
+            'La evidencia fotográfica es opcional.'
+        : 'Para liquidar un folio se requiere el diagnóstico final. ' +
+            'La evidencia fotográfica es opcional.',
     )
     return
   }
