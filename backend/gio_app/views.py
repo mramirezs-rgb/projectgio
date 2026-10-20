@@ -239,15 +239,18 @@ class IncidenteViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['get', 'post'], url_path='mensajes', throttle_scope='chat')
     def mensajes(self, request, pk=None):
         """Chat del folio. GET devuelve los últimos mensajes, o con `despues` solo los posteriores
-        a ese id, y los marca como leídos para quien consulta. Admite mensajes aunque el folio
-        esté liquidado: la conversación no modifica el folio."""
+        a ese id, y los marca como leídos para quien consulta. POST acepta JSON con `texto` o
+        multipart con `texto` e `imagen`. Admite mensajes aunque el folio esté liquidado: la
+        conversación no modifica el folio."""
         incidente = self.get_object()
         if request.method == 'POST':
-            serializer = MensajeFolioSerializer(data=request.data)
+            contexto = {'request': request}
+            serializer = MensajeFolioSerializer(data=request.data, context=contexto)
             serializer.is_valid(raise_exception=True)
             mensaje = serializer.save(incidente=incidente, autor=request.user)
             LecturaChat.marcar(incidente, request.user, mensaje.pk)
-            return Response(MensajeFolioSerializer(mensaje).data, status=status.HTTP_201_CREATED)
+            return Response(MensajeFolioSerializer(mensaje, context=contexto).data,
+                            status=status.HTTP_201_CREATED)
 
         consulta = incidente.mensajes.select_related('autor')
         despues = request.query_params.get('despues')
@@ -261,7 +264,8 @@ class IncidenteViewSet(viewsets.ModelViewSet):
             mensajes = list(consulta.order_by('-id')[:MAX_MENSAJES_POR_CONSULTA])[::-1]
         if mensajes:
             LecturaChat.marcar(incidente, request.user, mensajes[-1].pk)
-        return Response(MensajeFolioSerializer(mensajes, many=True).data)
+        return Response(MensajeFolioSerializer(mensajes, many=True,
+                                               context={'request': request}).data)
 
     @action(detail=False, methods=['get'], url_path='mensajes-pendientes')
     def pendientes_de_chat(self, request):

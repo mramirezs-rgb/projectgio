@@ -177,7 +177,14 @@ export const subirEvidencia = (id, formData, onProgreso) =>
 export const eliminarEvidencia = (idEvidencia) => api.delete(`/evidencias/${idEvidencia}/`)
 
 export const getMensajes = (id, params) => api.get(`/incidentes/${id}/mensajes/`, { params })
-export const enviarMensaje = (id, texto) => api.post(`/incidentes/${id}/mensajes/`, { texto })
+// `datos` es { texto } o un FormData con `texto` e `imagen` cuando se adjunta una foto.
+export const enviarMensaje = (id, datos, onProgreso) =>
+  api.post(`/incidentes/${id}/mensajes/`, datos, {
+    timeout: 90000,
+    onUploadProgress: (evento) => {
+      if (onProgreso && evento.total) onProgreso(Math.round((evento.loaded * 100) / evento.total))
+    },
+  })
 export const getMensajesPendientes = () => api.get('/incidentes/mensajes-pendientes/')
 
 export const getTecnicos = (params) => api.get('/tecnicos/', { params })

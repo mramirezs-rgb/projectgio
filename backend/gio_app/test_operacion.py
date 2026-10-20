@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch
 
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.management import call_command
 from django.test import override_settings
 from django.urls import reverse
@@ -597,3 +598,59 @@ class ChatFolioTests(BaseGIOTestCase):
                          status.HTTP_201_CREATED)
         cerrado.refresh_from_db()
         self.assertEqual(cerrado.estatus, Incidente.Estatus.LIQUIDADO)
+
+
+class ChatFotosTests(BaseGIOTestCase):
+    def setUp(self):
+        super().setUp()
+        carpeta = tempfile.TemporaryDirectory()
+        self.addCleanup(carpeta.cleanup)
+        ajuste = override_settings(MEDIA_ROOT=carpeta.name, EVIDENCIA_MAX_BYTES=512 * 1024)
+        ajuste.enable()
+        self.addCleanup(ajuste.disable)
+        self.url = reverse('incidente-mensajes', args=[self.propio.pk])
+
+    def enviar(self, usuario, **datos):
+        self.autenticar(usuario)
+        return self.client.post(self.url, datos, format='multipart')
+
+    def test_planta_interna_y_externa_envian_fotos_con_o_sin_texto(self):
+        respuesta = self.enviar(self.tecnico, imagen=imagen_en_memoria(), texto='Así está el par')
+        self.assertEqual(respuesta.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(respuesta.data['texto'], 'Así está el par')
+        self.assertTrue(respuesta.data['imagen_url'].startswith('http://testserver/media/chat/'))
+        self.assertNotIn('imagen', respuesta.data)
+
+        respuesta = self.enviar(self.evaluador, imagen=imagen_en_memoria('gestion.png'))
+        self.assertEqual(respuesta.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(respuesta.data['texto'], '')
+
+        mensajes = self.client.get(self.url).data
+        self.assertTrue(all(m['imagen_url'] for m in mensajes))
+        self.assertFalse(self.propio.evidencias.exists())
+        self.assertGreater(self.propio.mensajes.first().tamano_bytes, 0)
+
+    def test_mensaje_sin_texto_ni_foto_se_rechaza(self):
+        respuesta = self.enviar(self.tecnico, texto='  ')
+        self.assertEqual(respuesta.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('texto', respuesta.data)
+
+    def test_archivo_que_no_es_imagen_se_rechaza(self):
+        archivo = SimpleUploadedFile('nota.jpg', b'no es una imagen', content_type='image/jpeg')
+        respuesta = self.enviar(self.tecnico, imagen=archivo)
+        self.assertEqual(respuesta.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('imagen', respuesta.data)
+
+    @override_settings(EVIDENCIA_MAX_BYTES=1024)
+    def test_foto_demasiado_pesada_se_rechaza(self):
+        grande = imagen_en_memoria(tamano=(900, 900), calidad=98)
+        respuesta = self.enviar(self.tecnico, imagen=grande)
+        self.assertEqual(respuesta.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('límite', str(respuesta.data['imagen']))
+        self.assertFalse(self.propio.mensajes.exists())
+
+    def test_el_aviso_indica_que_llego_una_foto(self):
+        self.enviar(self.tecnico, imagen=imagen_en_memoria())
+        self.autenticar(self.evaluador)
+        avisos = self.client.get(reverse('incidente-pendientes-de-chat')).data
+        self.assertEqual(avisos['recientes'][0]['ultimo']['texto'], 'Envió una foto')

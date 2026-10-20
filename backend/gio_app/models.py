@@ -8,11 +8,19 @@ from django.db import models
 from django.utils import timezone
 
 
-def ruta_evidencia(instance, filename):
+def _ruta_de_imagen(carpeta, instance, filename):
     extension = (filename.rsplit('.', 1)[-1] or 'jpg').lower()[:5]
     folio = (instance.incidente.folio or 'sin-folio').replace('/', '-')
     fecha = timezone.now()
-    return f'evidencias/{fecha:%Y/%m}/{folio}/{uuid.uuid4().hex}.{extension}'
+    return f'{carpeta}/{fecha:%Y/%m}/{folio}/{uuid.uuid4().hex}.{extension}'
+
+
+def ruta_evidencia(instance, filename):
+    return _ruta_de_imagen('evidencias', instance, filename)
+
+
+def ruta_chat(instance, filename):
+    return _ruta_de_imagen('chat', instance, filename)
 
 
 class Incidente(models.Model):
@@ -279,12 +287,17 @@ class TurnoEvaluador(models.Model):
 
 
 class MensajeFolio(models.Model):
-    """Mensaje del chat de un folio entre planta externa, planta interna y supervisión."""
+    """Mensaje del chat de un folio entre planta externa, planta interna y supervisión.
+
+    Lleva texto, una foto o ambos. La foto queda en el chat y no cuenta como evidencia del folio.
+    """
 
     incidente = models.ForeignKey(Incidente, on_delete=models.CASCADE, related_name='mensajes')
     autor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
                               null=True, blank=True, related_name='mensajes_folio')
-    texto = models.TextField()
+    texto = models.TextField(blank=True, default='')
+    imagen = models.ImageField(upload_to=ruta_chat, blank=True)
+    tamano_bytes = models.PositiveIntegerField(default=0)
     creado_en = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -296,6 +309,11 @@ class MensajeFolio(models.Model):
 
     def __str__(self):
         return f'Mensaje {self.pk} — folio {self.incidente_id}'
+
+    def save(self, *args, **kwargs):
+        if self.imagen and not self.tamano_bytes:
+            self.tamano_bytes = getattr(self.imagen, 'size', 0) or 0
+        return super().save(*args, **kwargs)
 
 
 class LecturaChat(models.Model):

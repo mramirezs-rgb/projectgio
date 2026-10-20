@@ -53,6 +53,8 @@ def mensajes_pendientes(usuario, folios):
 
 def _vista_previa(mensaje):
     texto = ' '.join(mensaje.texto.split())
+    if mensaje.imagen:
+        texto = f'Foto: {texto}' if texto else 'Envió una foto'
     if len(texto) > LARGO_VISTA_PREVIA:
         texto = texto[:LARGO_VISTA_PREVIA - 1] + '…'
     return {

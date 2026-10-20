@@ -11,6 +11,26 @@ FORMATOS_IMAGEN = ('JPEG', 'JPG', 'PNG', 'WEBP')
 MAX_CARACTERES_MENSAJE = 2000
 
 
+def validar_imagen(archivo):
+    """Peso y formato de una foto de evidencia o del chat; el cliente ya la comprimió."""
+    if archivo.size > settings.EVIDENCIA_MAX_BYTES:
+        limite_kb = settings.EVIDENCIA_MAX_BYTES // 1024
+        raise serializers.ValidationError(
+            f'La imagen pesa {archivo.size // 1024} KB y el límite es {limite_kb} KB. '
+            'Debe comprimirse antes de enviarse.'
+        )
+    formato = str(getattr(archivo.image, 'format', '') or '').upper()
+    if formato not in FORMATOS_IMAGEN:
+        raise serializers.ValidationError('Formato no admitido. Use JPEG, PNG o WebP.')
+    return archivo
+
+
+def url_de_imagen(campo, peticion):
+    if not campo:
+        return None
+    return peticion.build_absolute_uri(campo.url) if peticion else campo.url
+
+
 class EvidenciaIncidenteSerializer(serializers.ModelSerializer):
     imagen_url = serializers.SerializerMethodField()
     subido_por_nombre = serializers.SerializerMethodField()
@@ -23,26 +43,13 @@ class EvidenciaIncidenteSerializer(serializers.ModelSerializer):
         extra_kwargs = {'imagen': {'write_only': True}}
 
     def get_imagen_url(self, obj):
-        if not obj.imagen:
-            return None
-        peticion = self.context.get('request')
-        url = obj.imagen.url
-        return peticion.build_absolute_uri(url) if peticion else url
+        return url_de_imagen(obj.imagen, self.context.get('request'))
 
     def get_subido_por_nombre(self, obj):
         return obj.subido_por.nombre_completo if obj.subido_por else 'Sin registro'
 
     def validate_imagen(self, archivo):
-        if archivo.size > settings.EVIDENCIA_MAX_BYTES:
-            limite_kb = settings.EVIDENCIA_MAX_BYTES // 1024
-            raise serializers.ValidationError(
-                f'La imagen pesa {archivo.size // 1024} KB y el límite es {limite_kb} KB. '
-                'Debe comprimirse antes de enviarse.'
-            )
-        formato = str(getattr(archivo.image, 'format', '') or '').upper()
-        if formato not in FORMATOS_IMAGEN:
-            raise serializers.ValidationError('Formato no admitido. Use JPEG, PNG o WebP.')
-        return archivo
+        return validar_imagen(archivo)
 
 
 class BitacoraIncidenteSerializer(serializers.ModelSerializer):
@@ -59,23 +66,39 @@ class BitacoraIncidenteSerializer(serializers.ModelSerializer):
 
 
 class MensajeFolioSerializer(serializers.ModelSerializer):
-    texto = serializers.CharField(max_length=MAX_CARACTERES_MENSAJE, error_messages={
-        'blank': 'Escriba un mensaje.',
-        'max_length': f'El mensaje admite hasta {MAX_CARACTERES_MENSAJE} caracteres.',
-    })
+    texto = serializers.CharField(
+        max_length=MAX_CARACTERES_MENSAJE, required=False, allow_blank=True,
+        error_messages={
+            'max_length': f'El mensaje admite hasta {MAX_CARACTERES_MENSAJE} caracteres.',
+        },
+    )
+    imagen_url = serializers.SerializerMethodField()
     autor_nombre = serializers.SerializerMethodField()
     autor_rol = serializers.SerializerMethodField()
 
     class Meta:
         model = MensajeFolio
-        fields = ['id', 'texto', 'autor', 'autor_nombre', 'autor_rol', 'creado_en']
+        fields = ['id', 'texto', 'imagen', 'imagen_url', 'autor', 'autor_nombre', 'autor_rol',
+                  'creado_en']
         read_only_fields = ['autor', 'creado_en']
+        extra_kwargs = {'imagen': {'write_only': True, 'required': False}}
+
+    def get_imagen_url(self, obj):
+        return url_de_imagen(obj.imagen, self.context.get('request'))
 
     def get_autor_nombre(self, obj):
         return obj.autor.nombre_completo if obj.autor else 'Usuario eliminado'
 
     def get_autor_rol(self, obj):
         return obj.autor.rol if obj.autor else ''
+
+    def validate_imagen(self, archivo):
+        return validar_imagen(archivo)
+
+    def validate(self, datos):
+        if not datos.get('texto') and not datos.get('imagen'):
+            raise serializers.ValidationError({'texto': 'Escriba un mensaje o adjunte una foto.'})
+        return datos
 
 
 class PermisosFolioMixin:
