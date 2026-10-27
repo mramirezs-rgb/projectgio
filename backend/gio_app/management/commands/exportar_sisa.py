@@ -1,9 +1,10 @@
 import logging
+import os
 from pathlib import Path
 
 import pandas as pd
 from django.conf import settings
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 from django.utils import timezone
 
@@ -74,10 +75,23 @@ class Command(BaseCommand):
             return
 
         carpeta = Path(opciones['carpeta']) if opciones['carpeta'] else settings.SISA_EXPORTS_DIR
-        carpeta.mkdir(parents=True, exist_ok=True)
-        destino = carpeta / f'RETORNO_SISA_{timezone.localtime():%Y%m%d_%H%M}.csv'
+        try:
+            destino = self._escribir(carpeta, incidentes, marco)
+        except OSError as error:
+            raise CommandError(
+                f'No se pudo escribir el retorno en {carpeta}: {error}. Los folios siguen pendientes '
+                'y se exportarán en la siguiente corrida.') from error
 
-        marco.to_csv(destino, index=False, encoding='utf-8-sig')
+        log.info('Retorno SISA generado en %s con %s folios', destino, len(incidentes))
+        self.stdout.write(self.style.SUCCESS(
+            f'Retorno generado: {destino} ({len(incidentes)} folio(s)).{promedio}'))
+
+    def _escribir(self, carpeta, incidentes, marco):
+        carpeta.mkdir(parents=True, exist_ok=True)
+        destino = self._destino_libre(carpeta)
+        # La otra computadora puede leer la carpeta en cualquier momento: el CSV se escribe con
+        # otro nombre y se renombra ya completo. Si algo falla, los folios no quedan como exportados.
+        temporal = destino.with_name(destino.name + '.tmp')
 
         with transaction.atomic():
             ahora = timezone.now()
@@ -95,7 +109,21 @@ class Command(BaseCommand):
                     detalle=f'{destino.name} — MTTR {inc.mttr_horas} h',
                 ) for inc in incidentes
             ])
+            try:
+                marco.to_csv(temporal, index=False, encoding='utf-8-sig')
+                os.replace(temporal, destino)
+            finally:
+                temporal.unlink(missing_ok=True)
+        return destino
 
-        log.info('Retorno SISA generado en %s con %s folios', destino, len(incidentes))
-        self.stdout.write(self.style.SUCCESS(
-            f'Retorno generado: {destino} ({len(incidentes)} folio(s)).{promedio}'))
+    @staticmethod
+    def _destino_libre(carpeta):
+        """Nombre con fecha y hora que no pisa un retorno anterior, aunque se corra dos veces
+        en el mismo segundo."""
+        base = f'RETORNO_SISA_{timezone.localtime():%Y%m%d_%H%M%S}'
+        destino = carpeta / f'{base}.csv'
+        consecutivo = 1
+        while destino.exists():
+            consecutivo += 1
+            destino = carpeta / f'{base}_{consecutivo}.csv'
+        return destino

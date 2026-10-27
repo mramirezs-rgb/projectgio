@@ -1,3 +1,4 @@
+import io
 import unicodedata
 
 import pandas as pd
@@ -79,6 +80,21 @@ def a_fecha(valor):
     return fecha
 
 
+def leer_html(ruta):
+    """Muchos sistemas exportan como .xls una tabla HTML, a menudo sin declarar su codificación."""
+    crudo = ruta.read_bytes()
+    for codificacion in ('utf-8-sig', 'cp1252', 'latin1'):
+        try:
+            contenido = crudo.decode(codificacion)
+            break
+        except UnicodeDecodeError:
+            continue
+    try:
+        return pd.read_html(io.StringIO(contenido))
+    except ValueError:
+        return pd.read_html(ruta)
+
+
 def leer_tabla(ruta):
     sufijo = ruta.suffix.lower()
     if sufijo in ('.xlsx', '.xls'):
@@ -91,7 +107,7 @@ def leer_tabla(ruta):
                 continue
         if not marcos:
             try:
-                marcos = pd.read_html(ruta)
+                marcos = leer_html(ruta)
             except Exception:
                 marcos = []
         if not marcos:

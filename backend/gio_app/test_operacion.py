@@ -1,12 +1,14 @@
 import csv
 import io
+import os
+import shutil
 import tempfile
 from datetime import datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch
 
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.core.management import call_command
+from django.core.management import CommandError, call_command
 from django.test import override_settings
 from django.urls import reverse
 from django.utils import timezone
@@ -764,3 +766,149 @@ class LiquidacionPorGerenciaTests(BaseGIOTestCase):
         self.assertEqual(respuesta.status_code, status.HTTP_200_OK)
         self.assertEqual(respuesta.data['estatus'], Incidente.Estatus.LIQUIDADO)
         self.assertEqual(respuesta.data['desc_liq'], 'Restablecido')
+
+
+class CarpetaCompartidaSisaTests(BaseGIOTestCase):
+    """La carpeta de intercambio puede ser una carpeta compartida en red con otra computadora."""
+
+    def setUp(self):
+        super().setUp()
+        carpeta = tempfile.TemporaryDirectory()
+        self.addCleanup(carpeta.cleanup)
+        self.raiz = Path(carpeta.name)
+        self.entrada = self.raiz / 'sisa_imports'
+        self.salida = self.raiz / 'sisa_exports'
+        self.entrada.mkdir()
+        ajuste = override_settings(
+            PRIVATE_DATA_DIR=self.raiz, SISA_IMPORTS_DIR=self.entrada,
+            SISA_IMPORTS_PROCESADOS_DIR=self.entrada / 'procesados', SISA_EXPORTS_DIR=self.salida)
+        ajuste.enable()
+        self.addCleanup(ajuste.disable)
+
+    def depositar(self, nombre, contenido, hace_segundos=600):
+        ruta = self.entrada / nombre
+        ruta.write_text(ENCABEZADO_SISA + contenido, encoding='utf-8')
+        marca = timezone.now().timestamp() - hace_segundos
+        os.utime(ruta, (marca, marca))
+        return ruta
+
+    def ingestar(self, *argumentos):
+        salida = io.StringIO()
+        call_command('ingesta_sisa', *argumentos, stdout=salida, stderr=io.StringIO())
+        return salida.getvalue()
+
+    def test_ingesta_la_carpeta_y_archiva_lo_leido(self):
+        self.depositar('reporte.csv', '70000001,UNINET,PUEBLA,LOS PINOS,,\n')
+        self.ingestar()
+        self.assertTrue(Incidente.objects.filter(folio='70000001').exists())
+        self.assertFalse((self.entrada / 'reporte.csv').exists())
+        self.assertEqual(len(list((self.entrada / 'procesados').glob('reporte_*.csv'))), 1)
+
+    def test_espera_a_que_termine_de_copiarse_el_archivo(self):
+        ruta = self.depositar('reporte.csv', '70000002,UNINET,PUEBLA,LOS PINOS,,\n',
+                              hace_segundos=5)
+        salida = self.ingestar()
+        self.assertIn('se sigue copiando', salida)
+        self.assertFalse(Incidente.objects.filter(folio='70000002').exists())
+        self.assertTrue(ruta.exists())
+        self.ingestar('--espera', '0')
+        self.assertTrue(Incidente.objects.filter(folio='70000002').exists())
+
+    def test_lee_el_xls_que_en_realidad_es_una_tabla_html(self):
+        ruta = self.entrada / 'reporte.xls'
+        ruta.write_text('<html><body><table><tr><th>FOLIO</th><th>EMPRESA</th><th>ÁREA</th>'
+                        '<th>TÉCNICO ASIGNADO</th></tr><tr><td>70000005</td><td>UNINET</td>'
+                        '<td>PUEBLA</td><td>LUIS SERRANO</td></tr></table></body></html>',
+                        encoding='utf-8')
+        self.ingestar('--espera', '0')
+        folio = Incidente.objects.get(folio='70000005')
+        self.assertEqual(folio.tecnico, self.tecnico)
+
+    def test_carpeta_de_red_inaccesible_da_un_error_claro(self):
+        with override_settings(SISA_IMPORTS_DIR=self.entrada / 'reporte.csv' / 'no-existe'):
+            self.depositar('reporte.csv', '70000006,UNINET,PUEBLA,LOS PINOS,,\n')
+            with self.assertRaisesMessage(CommandError, 'No se puede abrir la carpeta'):
+                self.ingestar()
+
+    def test_ignora_los_archivos_temporales_de_excel(self):
+        (self.entrada / '~$reporte.xlsx').write_bytes(b'bloqueo de Excel')
+        salida = self.ingestar()
+        self.assertIn('Sin archivos pendientes', salida)
+        self.assertTrue((self.entrada / '~$reporte.xlsx').exists())
+
+    def test_si_no_puede_archivar_sigue_con_los_demas_archivos(self):
+        self.depositar('a.csv', '70000003,UNINET,PUEBLA,LOS PINOS,,\n')
+        self.depositar('b.csv', '70000004,UNINET,PUEBLA,LOS PINOS,,\n')
+        movimiento_real = shutil.move
+
+        def mover(origen, destino):
+            if origen.endswith('a.csv'):
+                raise PermissionError('El archivo está abierto en otra computadora')
+            return movimiento_real(origen, destino)
+
+        with patch('gio_app.management.commands.ingesta_sisa.shutil.move', side_effect=mover):
+            salida = self.ingestar()
+        self.assertIn('no se pudo archivar', salida)
+        self.assertEqual(Incidente.objects.filter(folio__in=['70000003', '70000004']).count(), 2)
+        self.assertFalse((self.entrada / 'b.csv').exists())
+
+    def test_retorno_no_se_sobrescribe_si_se_genera_dos_veces_en_el_mismo_minuto(self):
+        liquidado('LIQ-A', self.tecnico, self.evaluador)
+        call_command('exportar_sisa', stdout=io.StringIO())
+        liquidado('LIQ-B', self.tecnico, self.evaluador)
+        call_command('exportar_sisa', stdout=io.StringIO())
+        archivos = sorted(self.salida.glob('RETORNO_SISA_*.csv'))
+        self.assertEqual(len(archivos), 2)
+        folios = set()
+        for archivo in archivos:
+            with archivo.open(encoding='utf-8-sig') as contenido:
+                folios.update(fila['FOLIO'] for fila in csv.DictReader(contenido))
+        self.assertEqual(folios, {'LIQ-A', 'LIQ-B'})
+        self.assertEqual(list(self.salida.glob('*.tmp')), [])
+
+    def test_retorno_fallido_no_marca_los_folios_como_exportados(self):
+        folio = liquidado('LIQ-C', self.tecnico, self.evaluador)
+        with patch('gio_app.management.commands.exportar_sisa.os.replace',
+                   side_effect=PermissionError('Carpeta de red sin permiso de escritura')):
+            with self.assertRaisesMessage(CommandError, 'siguen pendientes'):
+                call_command('exportar_sisa', stdout=io.StringIO())
+        folio.refresh_from_db()
+        self.assertFalse(folio.exportado_sisa)
+        self.assertEqual(list(self.salida.glob('*')), [])
+
+
+class RefrescoSisaTests(BaseGIOTestCase):
+    """Lo que GIO registra no se pierde cuando el reporte SISA vuelve a traer el folio."""
+
+    def test_sin_columna_de_enlace_no_borra_el_estado_registrado(self):
+        self.propio.estado_enlace = Incidente.EstadoEnlace.UP
+        self.propio.save()
+        correr('ingesta_sisa', f'{self.propio.folio},SERVICIOS MULTIPLES,PUEBLA,LOS PINOS,,\n',
+               '--sin-mover')
+        self.propio.refresh_from_db()
+        self.assertEqual(self.propio.estado_enlace, Incidente.EstadoEnlace.UP)
+        self.assertFalse(self.propio.bitacora.filter(accion=BitacoraIncidente.Accion.INGESTA)
+                         .exists())
+
+    def test_folio_nuevo_sin_columna_de_enlace_queda_desconocido(self):
+        correr('ingesta_sisa', '70000010,UNINET,PUEBLA,LOS PINOS,,\n', '--sin-mover')
+        self.assertEqual(Incidente.objects.get(folio='70000010').estado_enlace,
+                         Incidente.EstadoEnlace.DESCONOCIDO)
+
+    def test_no_reemplaza_la_liquidacion_hecha_en_gio(self):
+        folio = liquidado('70000011', self.tecnico, self.evaluador)
+        folio.cve_liq, folio.desc_liq = 'R01', 'Cambio de módem'
+        folio.estado_enlace = Incidente.EstadoEnlace.UP
+        folio.save()
+        salida = io.StringIO()
+        with tempfile.TemporaryDirectory() as carpeta:
+            ruta = Path(carpeta) / 'reporte.csv'
+            ruta.write_text('FOLIO,EMPRESA,CVE LIQ,DESC LIQ,ESTATUS I/O\n'
+                            '70000011,NUEVA RAZON SOCIAL,X99,Pendiente de visita,DOWN\n',
+                            encoding='utf-8')
+            call_command('ingesta_sisa', '--archivo', str(ruta), stdout=salida)
+        folio.refresh_from_db()
+        self.assertEqual((folio.cve_liq, folio.desc_liq), ('R01', 'Cambio de módem'))
+        self.assertEqual(folio.estado_enlace, Incidente.EstadoEnlace.UP)
+        self.assertEqual(folio.empresa, 'NUEVA RAZON SOCIAL')
+

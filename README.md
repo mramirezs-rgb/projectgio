@@ -15,6 +15,7 @@ robot de retorno hacia los sistemas legados.
 backend/                 API REST, modelos, RBAC y comandos ETL
   gio_app/               Incidentes, evidencias, bitácora, métricas
   usuarios/              Modelo UsuarioGIO (acceso por expediente) y gestión de usuarios
+  scripts/               sincronizar_sisa.bat para el Programador de tareas de Windows
 frontend/                Cliente Vue 3 (escritorio PI + móvil PE)
 private_data/            Carpetas aisladas de intercambio SISA (no se versionan)
   sisa_imports/          Reportes de averías a ingerir
@@ -111,7 +112,9 @@ número. Los textos que una hoja de cálculo ejecutaría como fórmula (empiezan
 ## Intercambio con SISA
 
 Los reportes clasificados no se cargan por la interfaz web: se depositan en carpetas del servidor y
-se procesan en segundo plano.
+se procesan en segundo plano. La carpeta `private_data/` puede compartirse en la red para que la
+computadora de SISA deje ahí el reporte y recoja el retorno; los pasos están en
+[`docs/carpeta-compartida-sisa.md`](docs/carpeta-compartida-sisa.md).
 
 ```bash
 # Ingesta: private_data/sisa_imports/*.csv|xlsx|xls -> folios PENDIENTE
@@ -141,15 +144,27 @@ pone en `OQU` (por ejemplo, `CASPUE OPERADORA INTERNET`), porque no son personas
 quedan sin técnico de planta interna para el reparto por turnos. Con `--excluir TEXTO` se omiten
 otros nombres. `--area` se aplica a todas las altas; sin él, el usuario queda sin zona y en el
 reparto puede recibir folios de cualquier área. El área operativa es la
-columna `ÁREA` (p. ej. JALAPA); XALAPA es una COPE/central dentro de ella. La exportación marca
-`exportado_sisa = True` dentro de una transacción, de modo que una segunda corrida no duplica
-folios.
+columna `ÁREA` (p. ej. JALAPA); XALAPA es una COPE/central dentro de ella. En un folio que ya está
+liquidado en GIO, la ingesta no reemplaza la clave ni la descripción de liquidación, los códigos
+COD4/CARLS/COD5 ni el estado del enlace; y si el reporte no trae la columna `ESTATUS I/O`, no borra
+el estado del enlace que ya se había registrado.
 
-Programación sugerida en el servidor (Task Scheduler o cron):
+Como la carpeta puede ser de red, la ingesta solo lee reportes que llevan
+`GIO_SISA_ESPERA_SEGUNDOS` (60 por omisión) sin modificarse, ignora los `~$…` que Excel crea
+mientras un libro está abierto, lee también los `.xls` que en realidad son tablas HTML y, si no
+puede mover un archivo a `procesados/`, lo vuelve a leer en la siguiente corrida sin duplicar
+folios. La exportación marca `exportado_sisa = True` en la misma transacción en que escribe el
+retorno: lo escribe con otro nombre y lo renombra completo, nunca reemplaza un retorno anterior y,
+si falla, los folios siguen pendientes. Las rutas relativas de `GIO_PRIVATE_DATA_DIR` se toman desde
+`backend/`; `GIO_SISA_IMPORTS_DIR` y `GIO_SISA_EXPORTS_DIR` permiten apuntar la entrada y el retorno
+a otra carpeta, incluso de otra computadora (`\\PC-SISA\GIO_Reportes`).
+
+Programación sugerida en el servidor: `backend\scripts\sincronizar_sisa.bat` cada 15 minutos en el
+Programador de tareas de Windows (ejecuta la ingesta y el retorno y deja el resultado en
+`backend\logs\sisa.log`). Con cron:
 
 ```
-*/15 * * * *  python manage.py ingesta_sisa
-0    * * * *  python manage.py exportar_sisa
+*/15 * * * *  python manage.py ingesta_sisa && python manage.py exportar_sisa
 ```
 
 ## Evidencia fotográfica
