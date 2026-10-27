@@ -36,6 +36,7 @@ from .serializers import (
     IncidenteListaSerializer,
     IncidenteSerializer,
     IncidenteTecnicoSerializer,
+    LiquidacionSerializer,
     MAX_DIAS_PROGRAMACION,
     MensajeFolioSerializer,
     ProgramarTurnosSerializer,
@@ -45,6 +46,7 @@ from .serializers import (
 
 UsuarioGIO = get_user_model()
 log = logging.getLogger('gio.exportacion')
+log_folios = logging.getLogger('gio.folios')
 
 FORMATOS_EXPORTACION = {
     'xlsx': (generar_xlsx,
@@ -130,10 +132,9 @@ class IncidenteViewSet(viewsets.ModelViewSet):
         self._auditar_cambios(incidente, anterior, detalle_estatus=detalle)
 
     def perform_destroy(self, instance):
-        BitacoraIncidente.registrar(
-            instance, self.request.user, BitacoraIncidente.Accion.ACTUALIZACION,
-            detalle='Folio eliminado',
-        )
+        # La bitácora del folio se borra con él, así que la eliminación se deja en el registro.
+        log_folios.warning('Folio %s (id %s) eliminado por %s', instance.folio, instance.pk,
+                           self.request.user.expediente)
         instance.delete()
 
     def _auditar_cambios(self, incidente, anterior, detalle_estatus=''):
@@ -173,14 +174,17 @@ class IncidenteViewSet(viewsets.ModelViewSet):
             raise ValidationError({
                 'estatus': f'El folio en estatus {incidente.estatus} no puede liquidarse directamente.'
             })
+        extras = LiquidacionSerializer(data=request.data)
+        extras.is_valid(raise_exception=True)
+        extras = extras.validated_data
 
         estatus_anterior = incidente.estatus
         incidente.estatus = Incidente.Estatus.LIQUIDADO
         incidente.diagnostico_final = diagnostico or incidente.diagnostico_final
-        incidente.cve_liq = (request.data.get('cve_liq') or incidente.cve_liq or '').strip()
+        incidente.cve_liq = (extras.get('cve_liq') or incidente.cve_liq or '').strip()
         incidente.desc_liq = descripcion
-        incidente.codigo_fallo = (request.data.get('codigo_fallo') or incidente.codigo_fallo or '')
-        incidente.estado_enlace = request.data.get('estado_enlace') or Incidente.EstadoEnlace.UP
+        incidente.codigo_fallo = extras.get('codigo_fallo') or incidente.codigo_fallo or ''
+        incidente.estado_enlace = extras.get('estado_enlace') or Incidente.EstadoEnlace.UP
         incidente.exportado_sisa = False
         incidente.estado_sincronizacion = Incidente.Sincronizacion.PENDIENTE
         incidente.save()
@@ -308,6 +312,11 @@ class IncidenteViewSet(viewsets.ModelViewSet):
                 if incidente.tecnico and incidente.estatus == Incidente.Estatus.PENDIENTE:
                     cambios.append(('estatus', incidente.estatus, Incidente.Estatus.ASIGNADO))
                     incidente.estatus = Incidente.Estatus.ASIGNADO
+                # Sin técnico, el folio no puede seguir asignado ni en proceso.
+                elif not incidente.tecnico and incidente.estatus in (
+                        Incidente.Estatus.ASIGNADO, Incidente.Estatus.EN_PROCESO):
+                    cambios.append(('estatus', incidente.estatus, Incidente.Estatus.PENDIENTE))
+                    incidente.estatus = Incidente.Estatus.PENDIENTE
                 incidente.save()
                 for campo, anterior, nuevo in cambios:
                     BitacoraIncidente.registrar(

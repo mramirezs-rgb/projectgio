@@ -912,3 +912,45 @@ class RefrescoSisaTests(BaseGIOTestCase):
         self.assertEqual(folio.estado_enlace, Incidente.EstadoEnlace.UP)
         self.assertEqual(folio.empresa, 'NUEVA RAZON SOCIAL')
 
+
+class ValidacionesRevisionTests(BaseGIOTestCase):
+    def test_liquidar_rechaza_valores_fuera_de_catalogo(self):
+        self.propio.estatus = Incidente.Estatus.EN_PROCESO
+        self.propio.save()
+        self.autenticar(self.tecnico)
+        url = reverse('incidente-liquidar', args=[self.propio.pk])
+        for datos in ({'estado_enlace': 'ARRIBA'}, {'codigo_fallo': 'XYZ'}, {'cve_liq': 'C' * 51}):
+            respuesta = self.client.post(url, {'diagnostico_final': 'Se cambió el módem.', **datos},
+                                         format='json')
+            self.assertEqual(respuesta.status_code, status.HTTP_400_BAD_REQUEST, datos)
+        self.propio.refresh_from_db()
+        self.assertEqual(self.propio.estatus, Incidente.Estatus.EN_PROCESO)
+
+    def test_planta_interna_guarda_direccion_y_telefono(self):
+        self.autenticar(self.evaluador)
+        respuesta = self.client.patch(reverse('incidente-detail', args=[self.propio.pk]), {
+            'dir_pta_a': 'Av. Reforma 100', 'telefono_tecnico': '2221234567',
+        }, format='json')
+        self.assertEqual(respuesta.status_code, status.HTTP_200_OK)
+        self.propio.refresh_from_db()
+        self.assertEqual((self.propio.dir_pta_a, self.propio.telefono_tecnico),
+                         ('Av. Reforma 100', '2221234567'))
+
+    def test_quitar_el_tecnico_en_lote_regresa_el_folio_a_pendiente(self):
+        self.autenticar(self.sub)
+        respuesta = self.client.post(reverse('incidente-asignar-masivo'), {
+            'folios': [self.propio.folio], 'tecnico': None,
+        }, format='json')
+        self.assertEqual(respuesta.status_code, status.HTTP_200_OK)
+        self.propio.refresh_from_db()
+        self.assertIsNone(self.propio.tecnico)
+        self.assertEqual(self.propio.estatus, Incidente.Estatus.PENDIENTE)
+
+    def test_rango_de_fechas_incluye_el_dia_final(self):
+        hoy = timezone.localdate().isoformat()
+        Incidente.objects.create(folio='HOY-0001', area_operativa='PUEBLA')
+        self.autenticar(self.admin)
+        respuesta = self.client.get(reverse('incidente-metricas'),
+                                    {'abierto_desde': hoy, 'abierto_hasta': hoy})
+        self.assertEqual(respuesta.status_code, status.HTTP_200_OK)
+        self.assertGreaterEqual(respuesta.data['total'], 1)
