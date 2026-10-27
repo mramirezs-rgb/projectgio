@@ -180,7 +180,23 @@ DILACION_UMBRAL_CRITICO_DIAS = env_int('GIO_DILACION_UMBRAL_CRITICO_DIAS', 10)
 DATA_UPLOAD_MAX_MEMORY_SIZE = env_int('GIO_DATA_UPLOAD_MAX_MEMORY_SIZE', 5 * 1024 * 1024)
 FILE_UPLOAD_MAX_MEMORY_SIZE = DATA_UPLOAD_MAX_MEMORY_SIZE
 
-EMAIL_BACKEND = env('GIO_EMAIL_BACKEND', 'django.core.mail.backends.console.EmailBackend')
+# Correo para recuperar la contraseña. Con GIO_EMAIL_HOST se envía por SMTP; sin él, el correo
+# solo se imprime en la consola del servidor (útil en desarrollo).
+EMAIL_HOST = env('GIO_EMAIL_HOST', '')
+EMAIL_PORT = env_int('GIO_EMAIL_PORT', 587)
+EMAIL_HOST_USER = env('GIO_EMAIL_USUARIO', '')
+EMAIL_HOST_PASSWORD = env('GIO_EMAIL_PASSWORD', '')
+EMAIL_USE_SSL = env_bool('GIO_EMAIL_SSL', False)
+EMAIL_USE_TLS = env_bool('GIO_EMAIL_TLS', not EMAIL_USE_SSL)
+EMAIL_TIMEOUT = env_int('GIO_EMAIL_TIMEOUT', 20)
+DEFAULT_FROM_EMAIL = env('GIO_EMAIL_REMITENTE', EMAIL_HOST_USER or 'gio@localhost')
+EMAIL_BACKEND = env('GIO_EMAIL_BACKEND', 'django.core.mail.backends.smtp.EmailBackend'
+                    if EMAIL_HOST else 'django.core.mail.backends.console.EmailBackend')
+
+# Dirección con la que los técnicos abren GIO; se usa en el enlace del correo de recuperación.
+# Sin definir, en producción se toma del dominio con que se pidió la recuperación.
+URL_PUBLICA = (env('GIO_URL_PUBLICA') or ('http://localhost:5173' if DEBUG else '')).rstrip('/')
+PASSWORD_RESET_TIMEOUT = env_int('GIO_RECUPERACION_MINUTOS', 60) * 60
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
@@ -201,6 +217,7 @@ REST_FRAMEWORK = {
     ),
     'DEFAULT_THROTTLE_RATES': {
         'login': env('GIO_THROTTLE_LOGIN', '20/min'),
+        'recuperacion': env('GIO_THROTTLE_RECUPERACION', '10/hour'),
         'evidencia': env('GIO_THROTTLE_EVIDENCIA', '120/hour'),
         # El chat abierto consulta mensajes nuevos cada 5 s; el margen cubre varias pestañas.
         'chat': env('GIO_THROTTLE_CHAT', '120/min'),
