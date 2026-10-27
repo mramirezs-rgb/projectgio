@@ -22,6 +22,7 @@ import {
   mostrarAdvertencia,
   mostrarError,
   mostrarExito,
+  mostrarInfo,
   notificar,
 } from '../utils/alerts.js'
 import { descargarArchivo, formatearHoras, marcaDeTiempo } from '../utils/formato.js'
@@ -191,10 +192,21 @@ const cancelarLiquidacionFolio = async (datos) => {
   }
 }
 
+// El retorno lo genera el servidor (exportar_sisa) en la carpeta de intercambio; aquí se informa
+// cuántos folios liquidados lo esperan con los filtros actuales.
 const abrirSisa = () => {
-  mostrarAdvertencia(
-    'Exportaciones SISA',
-    'El control de exportaciones a SISA de la nueva base de datos está en definición.',
+  const pendientes = kpis.value.pendientes_exportar
+  if (pendientes === null || pendientes === undefined) {
+    mostrarAdvertencia('Retorno a SISA', 'No se pudo consultar el estado del retorno a SISA.')
+    return
+  }
+  mostrarInfo(
+    'Retorno a SISA',
+    pendientes
+      ? `${pendientes} folio(s) liquidado(s) con los filtros actuales esperan su archivo de ` +
+          'retorno. El servidor los incluye en el siguiente RETORNO_SISA que deja en la carpeta ' +
+          'de intercambio.'
+      : 'Los folios liquidados con los filtros actuales ya se enviaron a SISA.',
   )
 }
 
