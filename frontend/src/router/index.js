@@ -9,6 +9,13 @@ const rutas = [
     meta: { publica: true },
   },
   {
+    // Enlace del correo de recuperación de contraseña.
+    path: '/restablecer/:uid/:token',
+    name: 'restablecer',
+    component: () => import('../views/Login.vue'),
+    meta: { publica: true },
+  },
+  {
     path: '/tablero',
     name: 'tablero',
     component: () => import('../views/Dashboard.vue'),

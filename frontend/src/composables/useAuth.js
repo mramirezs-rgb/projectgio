@@ -79,6 +79,12 @@ export function useAuth() {
     }
   }
 
+  // Tras cambiar datos de la propia cuenta, el servidor devuelve el perfil actualizado.
+  const aplicarPerfil = (perfil) => {
+    usuario.value = perfil
+    guardarSesion({ usuario: perfil })
+  }
+
   const cerrarSesion = () => {
     limpiarSesion()
     token.value = null
@@ -100,6 +106,7 @@ export function useAuth() {
     esGerencia,
     iniciarSesion,
     refrescarPerfil,
+    aplicarPerfil,
     cerrarSesion,
   }
 }

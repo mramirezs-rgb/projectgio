@@ -73,6 +73,25 @@ El acceso se realiza con el **expediente** corporativo, no con correo electróni
 El filtrado se aplica en el servidor (`get_queryset`), por lo que un técnico recibe `404` al pedir
 un folio ajeno, y los campos editables se restringen por serializador según el rol.
 
+## Contraseña y correo de recuperación
+
+Gerencia da de alta a cada usuario con una contraseña inicial. Después, cada quien entra a **Mi
+cuenta** (el ícono de persona en la barra superior) para cambiar su contraseña y registrar su
+**correo de recuperación**; ambos cambios piden la contraseña actual. Mientras no haya correo, el
+ícono muestra un punto de aviso.
+
+Si alguien olvida su contraseña, en el inicio de sesión usa **¿Olvidó su contraseña?** y escribe su
+expediente. GIO envía a su correo de recuperación un enlace que sirve una sola vez y vence en
+`GIO_RECUPERACION_MINUTOS` (60 por omisión); también deja de servir si la persona vuelve a entrar con
+su contraseña anterior. La respuesta en pantalla es la misma exista o no el expediente, para no
+revelar quién tiene cuenta, y las solicitudes se limitan con `GIO_THROTTLE_RECUPERACION`. Quien no
+registró correo pide el cambio a Gerencia, que puede asignarle una contraseña nueva en **Usuarios**.
+
+El envío usa el servidor de correo (SMTP) definido en `GIO_EMAIL_HOST`, `GIO_EMAIL_PORT`,
+`GIO_EMAIL_USUARIO`, `GIO_EMAIL_PASSWORD` y `GIO_EMAIL_REMITENTE`; sin `GIO_EMAIL_HOST` el correo
+solo se imprime en la consola del servidor. El enlace se arma con `GIO_URL_PUBLICA`, la dirección
+con la que los técnicos abren GIO (por ejemplo `https://gio.empresa.com.mx`).
+
 ## Ciclo de vida del folio
 
 ```
@@ -208,6 +227,9 @@ un diálogo abierto: espera a que se cierre. Los avisos se revisan cada 15 s y e
 | `POST` | `/api/auth/refresh/` | Renovación del token de acceso |
 | `GET` | `/api/auth/me/` | Perfil del usuario autenticado |
 | `POST` | `/api/auth/password/` | Cambio de contraseña propia |
+| `POST` | `/api/auth/correo/` | Registro del correo de recuperación propio (pide la contraseña actual) |
+| `POST` | `/api/auth/recuperar/` | Envía el enlace de recuperación al correo del expediente (sin sesión) |
+| `POST` | `/api/auth/restablecer/` | Nueva contraseña con el enlace del correo (sin sesión) |
 | `GET/POST` | `/api/usuarios/` | Gestión de usuarios (solo `ADMIN`) |
 | `GET/POST` | `/api/incidentes/` | Listado filtrado y paginado / alta de folio |
 | `GET/PATCH` | `/api/incidentes/{id}/` | Detalle y actualización según rol |
