@@ -48,6 +48,14 @@ def env_list(nombre, defecto=()):
     return [item.strip() for item in valor.split(',') if item.strip()]
 
 
+def env_ruta(nombre, defecto):
+    """Las rutas relativas se toman desde backend/, no desde la carpeta en que se ejecuta el
+    comando: el Programador de tareas arranca en C:\\Windows\\System32 si no se le indica otra.
+    Admite rutas de red como \\\\SERVIDOR\\GIO_SISA."""
+    ruta = Path(env(nombre, str(defecto))).expanduser()
+    return ruta if ruta.is_absolute() else (BASE_DIR / ruta).resolve()
+
+
 DEBUG = env_bool('GIO_DEBUG', True)
 
 SECRET_KEY = env('GIO_SECRET_KEY')
@@ -153,12 +161,16 @@ STATIC_URL = 'static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 
 MEDIA_URL = 'media/'
-MEDIA_ROOT = Path(env('GIO_MEDIA_ROOT', str(BASE_DIR / 'media')))
+MEDIA_ROOT = env_ruta('GIO_MEDIA_ROOT', BASE_DIR / 'media')
 
-PRIVATE_DATA_DIR = Path(env('GIO_PRIVATE_DATA_DIR', str(PROJECT_ROOT / 'private_data')))
-SISA_IMPORTS_DIR = PRIVATE_DATA_DIR / 'sisa_imports'
+# Carpeta de intercambio con SISA. Puede ser local o una carpeta compartida en red; cada subcarpeta
+# puede apuntar a otro lugar con GIO_SISA_IMPORTS_DIR y GIO_SISA_EXPORTS_DIR.
+PRIVATE_DATA_DIR = env_ruta('GIO_PRIVATE_DATA_DIR', PROJECT_ROOT / 'private_data')
+SISA_IMPORTS_DIR = env_ruta('GIO_SISA_IMPORTS_DIR', PRIVATE_DATA_DIR / 'sisa_imports')
 SISA_IMPORTS_PROCESADOS_DIR = SISA_IMPORTS_DIR / 'procesados'
-SISA_EXPORTS_DIR = PRIVATE_DATA_DIR / 'sisa_exports'
+SISA_EXPORTS_DIR = env_ruta('GIO_SISA_EXPORTS_DIR', PRIVATE_DATA_DIR / 'sisa_exports')
+# Segundos sin cambios que debe tener un reporte antes de leerlo: evita tomar uno que aún se copia.
+SISA_ESPERA_SEGUNDOS = env_int('GIO_SISA_ESPERA_SEGUNDOS', 60)
 
 EVIDENCIA_MAX_BYTES = env_int('GIO_EVIDENCIA_MAX_BYTES', 1024 * 1024)
 EVIDENCIA_MAX_POR_FOLIO = env_int('GIO_EVIDENCIA_MAX_POR_FOLIO', 12)

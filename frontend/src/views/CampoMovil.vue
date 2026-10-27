@@ -35,6 +35,11 @@ const chatAbierto = ref(false)
 const enviando = ref(false)
 const filtro = ref('activos')
 
+const ESTATUS_ACTIVOS = [ESTATUS.PENDIENTE, ESTATUS.ASIGNADO, ESTATUS.EN_PROCESO]
+// Los liquidados se acumulan con los meses: solo se traen los más recientes.
+const LIQUIDADOS_RECIENTES = 50
+const totalLiquidados = ref(0)
+
 const formLiquidacion = ref({ diagnostico_final: '', cve_liq: '', desc_liq: '', estado_enlace: 'UP' })
 
 const visibles = computed(() => {
@@ -46,18 +51,36 @@ const visibles = computed(() => {
 
 const conteos = computed(() => ({
   activos: folios.value.filter((f) => f.estatus !== ESTATUS.LIQUIDADO).length,
-  liquidados: folios.value.filter((f) => f.estatus === ESTATUS.LIQUIDADO).length,
+  liquidados: totalLiquidados.value,
   criticos: folios.value.filter(
     (f) => f.estatus !== ESTATUS.LIQUIDADO && f.semaforo === 'critico',
   ).length,
 }))
 
+const listaDe = (data) => (Array.isArray(data) ? data : data.results || [])
+
+// Activos y liquidados se piden por separado: en una sola consulta con límite, el historial de
+// liquidados acababa desplazando a los folios nuevos, que no aparecían en la lista.
 const cargar = async () => {
   cargando.value = true
   problema.value = ''
   try {
-    const { data } = await getIncidentes({ page_size: 200, ordering: '-dilacion_dias' })
-    folios.value = Array.isArray(data) ? data : data.results || []
+    const activos = new URLSearchParams([
+      ...ESTATUS_ACTIVOS.map((valor) => ['estatus', valor]),
+      ['page_size', '500'],
+      ['ordering', '-dilacion_dias'],
+    ])
+    const [resActivos, resLiquidados] = await Promise.all([
+      getIncidentes(activos),
+      getIncidentes({
+        estatus: ESTATUS.LIQUIDADO,
+        page_size: LIQUIDADOS_RECIENTES,
+        ordering: '-fecha_cierre',
+      }),
+    ])
+    const liquidados = listaDe(resLiquidados.data)
+    totalLiquidados.value = resLiquidados.data.count ?? liquidados.length
+    folios.value = [...listaDe(resActivos.data), ...liquidados]
   } catch (error) {
     problema.value = mensajeDeError(error, 'No se pudieron cargar los folios asignados.')
   } finally {
@@ -104,7 +127,8 @@ const alternar = async (folio) => {
     diagnostico_final: folio.diagnostico_final || '',
     cve_liq: folio.cve_liq || '',
     desc_liq: folio.desc_liq || '',
-    estado_enlace: folio.estado_enlace === 'DOWN' ? 'UP' : folio.estado_enlace || 'UP',
+    // Al cerrar lo normal es que el enlace quede restablecido; el técnico lo cambia si sigue caído.
+    estado_enlace: 'UP',
   }
   await cargarEvidencias(folio.id)
 }
@@ -120,7 +144,14 @@ const cargarEvidencias = async (id) => {
 
 const reemplazar = (actualizado) => {
   const indice = folios.value.findIndex((f) => f.id === actualizado.id)
-  if (indice !== -1) folios.value.splice(indice, 1, { ...folios.value[indice], ...actualizado })
+  if (indice === -1) return
+  const anterior = folios.value[indice].estatus
+  if (actualizado.estatus === ESTATUS.LIQUIDADO && anterior !== ESTATUS.LIQUIDADO) {
+    totalLiquidados.value += 1
+  } else if (anterior === ESTATUS.LIQUIDADO && actualizado.estatus !== ESTATUS.LIQUIDADO) {
+    totalLiquidados.value = Math.max(0, totalLiquidados.value - 1)
+  }
+  folios.value.splice(indice, 1, { ...folios.value[indice], ...actualizado })
 }
 
 const iniciarAtencion = async (folio) => {
@@ -420,6 +451,10 @@ const mapa = (direccion) =>
         </section>
       </li>
     </ul>
+
+    <p v-if="filtro === 'liquidados' && totalLiquidados > visibles.length" class="detalle__pista">
+      Se muestran los {{ visibles.length }} liquidados más recientes de {{ totalLiquidados }}.
+    </p>
   </div>
 </template>
 

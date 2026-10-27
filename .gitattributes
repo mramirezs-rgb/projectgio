@@ -1,0 +1,2 @@
+# Los .bat se ejecutan en Windows: cmd espera fin de línea CRLF.
+*.bat text eol=crlf

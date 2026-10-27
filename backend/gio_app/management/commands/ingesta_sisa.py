@@ -1,5 +1,6 @@
 import logging
 import shutil
+import time
 from pathlib import Path
 
 from django.conf import settings
@@ -44,6 +45,16 @@ CAMPOS_SISA = (
     'estado_enlace', 'fecha_ingreso',
 )
 
+# Una vez liquidado en GIO, la liquidación del técnico manda: el reporte SISA puede seguir trayendo
+# el folio con datos anteriores hasta que procese el archivo de retorno.
+CAMPOS_DE_LIQUIDACION = ('estado_enlace', 'cve_liq', 'desc_liq', 'desc_cod4', 'desc_carls',
+                         'desc_cod5')
+
+
+def es_archivo_temporal(ruta):
+    """Excel deja un `~$nombre.xlsx` mientras alguien tiene abierto el libro; no es un reporte."""
+    return ruta.name.startswith(('~$', '.'))
+
 
 class Command(BaseCommand):
     help = ('Ingesta los reportes de averías exportados por SISA desde la carpeta aislada '
@@ -58,6 +69,9 @@ class Command(BaseCommand):
                             help='No mueve los archivos procesados a la subcarpeta procesados/.')
         parser.add_argument('--no-actualizar', action='store_true',
                             help='Solo inserta folios nuevos; no refresca los datos SISA existentes.')
+        parser.add_argument('--espera', type=int, default=None, metavar='SEGUNDOS',
+                            help='Omite los archivos modificados hace menos de estos segundos, que '
+                                 'pueden estar copiándose (por omisión GIO_SISA_ESPERA_SEGUNDOS).')
 
     def handle(self, *args, **opciones):
         self.dry_run = opciones['dry_run']
@@ -70,10 +84,14 @@ class Command(BaseCommand):
             carpeta = rutas[0].parent
         else:
             carpeta = Path(opciones['carpeta']) if opciones['carpeta'] else settings.SISA_IMPORTS_DIR
-            carpeta.mkdir(parents=True, exist_ok=True)
-            rutas = sorted(
-                ruta for patron in EXTENSIONES for ruta in carpeta.glob(patron) if ruta.is_file()
-            )
+            try:
+                carpeta.mkdir(parents=True, exist_ok=True)
+                rutas = self._listos_para_leer(carpeta, opciones['espera'])
+            except OSError as error:
+                raise CommandError(
+                    f'No se puede abrir la carpeta {carpeta}: {error}. Si es una carpeta de red, '
+                    'revise que la computadora que la comparte esté encendida y que la cuenta que '
+                    'ejecuta esta tarea tenga permiso.') from error
 
         if not rutas:
             self.stdout.write(self.style.WARNING(f'Sin archivos pendientes en {carpeta}'))
@@ -102,7 +120,14 @@ class Command(BaseCommand):
             )
 
             if not self.dry_run and not opciones['sin_mover'] and not opciones['archivo']:
-                self._archivar(ruta)
+                try:
+                    self._archivar(ruta)
+                except OSError as error:
+                    # Lo leído ya quedó guardado; si se vuelve a leer, solo refresca los folios.
+                    log.warning('No se pudo archivar %s: %s', ruta.name, error)
+                    self.stdout.write(self.style.WARNING(
+                        f'  no se pudo archivar {ruta.name} ({error}); se volverá a leer en la '
+                        'siguiente corrida sin duplicar folios.'))
 
         resumen = (f"Ingesta finalizada: {totales['archivos']} archivo(s), "
                    f"{totales['nuevos']} folio(s) nuevo(s), "
@@ -111,13 +136,35 @@ class Command(BaseCommand):
         estilo = self.style.WARNING if self.dry_run else self.style.SUCCESS
         self.stdout.write(estilo(('[DRY-RUN] ' if self.dry_run else '') + resumen))
 
+    def _listos_para_leer(self, carpeta, espera):
+        """Reportes de la carpeta, sin temporales de Excel ni archivos que aún se están copiando."""
+        espera = settings.SISA_ESPERA_SEGUNDOS if espera is None else espera
+        limite = time.time() - max(espera, 0)
+        rutas = []
+        for ruta in sorted(r for patron in EXTENSIONES for r in carpeta.glob(patron)):
+            if es_archivo_temporal(ruta):
+                continue
+            try:
+                modificado = ruta.stat().st_mtime if ruta.is_file() else None
+            except OSError:
+                # La otra computadora lo movió o lo borró mientras se revisaba la carpeta.
+                continue
+            if modificado is None:
+                continue
+            if modificado > limite:
+                self.stdout.write(f'{ruta.name} se sigue copiando o se acaba de modificar; '
+                                  'se leerá en la siguiente corrida.')
+                continue
+            rutas.append(ruta)
+        return rutas
+
     def _archivar(self, ruta):
         destino_dir = settings.SISA_IMPORTS_PROCESADOS_DIR
         destino_dir.mkdir(parents=True, exist_ok=True)
-        marca = timezone.now().strftime('%Y%m%d_%H%M%S')
+        marca = timezone.localtime().strftime('%Y%m%d_%H%M%S')
         destino = destino_dir / f'{ruta.stem}_{marca}{ruta.suffix}'
         shutil.move(str(ruta), str(destino))
-        self.stdout.write(f'  archivado en {destino.relative_to(settings.PRIVATE_DATA_DIR)}')
+        self.stdout.write(f'  archivado en {destino}')
 
     def _tecnicos(self):
         if self._cache_tecnicos is None:
@@ -231,7 +278,10 @@ class Command(BaseCommand):
                         omitidos += 1
                         continue
                     cambios = []
+                    liquidado = existente.estatus == Incidente.Estatus.LIQUIDADO
                     for campo in CAMPOS_SISA:
+                        if liquidado and campo in CAMPOS_DE_LIQUIDACION:
+                            continue
                         valor = datos.get(campo)
                         if valor in (None, ''):
                             continue
@@ -276,6 +326,8 @@ class Command(BaseCommand):
                        if campo != 'fecha_ingreso'},
                 )
                 incidente.fecha_ingreso = datos.get('fecha_ingreso')
+                incidente.estado_enlace = (datos.get('estado_enlace')
+                                           or Incidente.EstadoEnlace.DESCONOCIDO)
                 incidente.save()
                 BitacoraIncidente.registrar(
                     incidente, None, BitacoraIncidente.Accion.INGESTA,
@@ -333,7 +385,8 @@ class Command(BaseCommand):
             'obs_usuario': primer_valor(fila, ['OBS USUARIO', 'OBSERVACIONES USUARIO']),
             'descripcion': primer_valor(fila, ['SINTOMA', 'DESC F1', 'OBS USUARIO']),
             'telefono_tecnico': primer_valor(fila, ['TELEFONO TECNICO'], 20),
-            'estado_enlace': ESTADOS_ENLACE.get(enlace_crudo, Incidente.EstadoEnlace.DESCONOCIDO),
+            # Vacío si el reporte no lo indica: así no borra el estado que ya registró GIO.
+            'estado_enlace': ESTADOS_ENLACE.get(enlace_crudo, ''),
             'fecha_ingreso': a_fecha(primer_valor(fila, ['FECHA INGRESO', 'FECHA APERTURA',
                                                          'FECHA'])),
             'dilacion_sisa': entero(primer_valor(fila, ['DILACION DIAS', 'DILACION'])),

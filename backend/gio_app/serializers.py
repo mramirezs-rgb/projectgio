@@ -260,6 +260,7 @@ CAMPOS_EDITABLES_TECNICO = (
 CAMPOS_EDITABLES_EVALUADOR = CAMPOS_EDITABLES_TECNICO + (
     'descripcion', 'observaciones_sisa', 'obs_usuario', 'desc_f1',
     'ips', 'dslam', 'red_secundaria', 'leyenda_sisa', 'tecnico', 'fecha_apertura',
+    'dir_pta_a', 'telefono_tecnico',
 )
 
 
@@ -283,6 +284,15 @@ class IncidenteTecnicoSerializer(IncidenteSerializer):
 class IncidenteEvaluadorSerializer(IncidenteSerializer):
     class Meta(IncidenteSerializer.Meta):
         read_only_fields = _solo_lectura_excepto(CAMPOS_EDITABLES_EVALUADOR)
+
+
+class LiquidacionSerializer(serializers.Serializer):
+    """Datos opcionales que acompañan la liquidación; se validan contra los catálogos del folio."""
+    cve_liq = serializers.CharField(max_length=50, required=False, allow_blank=True)
+    codigo_fallo = serializers.ChoiceField(choices=Incidente.CodigoFallo.choices, required=False,
+                                           allow_blank=True)
+    estado_enlace = serializers.ChoiceField(choices=Incidente.EstadoEnlace.choices,
+                                            required=False, allow_blank=True)
 
 
 class AsignacionMasivaSerializer(serializers.Serializer):

@@ -14,8 +14,9 @@ class IncidenteFilter(filtros.FilterSet):
     sin_evaluador = filtros.BooleanFilter(field_name='evaluador', lookup_expr='isnull')
     dilacion_min = filtros.NumberFilter(field_name='dilacion_dias', lookup_expr='gte')
     dilacion_max = filtros.NumberFilter(field_name='dilacion_dias', lookup_expr='lte')
-    abierto_desde = filtros.DateTimeFilter(field_name='fecha_apertura', lookup_expr='gte')
-    abierto_hasta = filtros.DateTimeFilter(field_name='fecha_apertura', lookup_expr='lte')
+    # Por día completo en hora local: "hasta" el 27 incluye los folios abiertos ese mismo día.
+    abierto_desde = filtros.DateFilter(field_name='fecha_apertura', lookup_expr='date__gte')
+    abierto_hasta = filtros.DateFilter(field_name='fecha_apertura', lookup_expr='date__lte')
     estatus = filtros.MultipleChoiceFilter(choices=Incidente.Estatus.choices)
 
     class Meta:
