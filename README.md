@@ -186,6 +186,21 @@ Programador de tareas de Windows (ejecuta la ingesta y el retorno y deja el resu
 */15 * * * *  python manage.py ingesta_sisa && python manage.py exportar_sisa
 ```
 
+### Empezar de cero
+
+Para quitar los folios de prueba antes de operar con datos reales:
+
+```bash
+python manage.py borrar_folios
+```
+
+El comando muestra cuántos folios, evidencias, mensajes y registros de bitácora se borrarán, avisa si
+hay folios liquidados que aún no se enviaban a SISA o archivos `RETORNO_SISA` en `sisa_exports/`, y
+pide escribir `BORRAR` para continuar. Antes de borrar guarda un respaldo en
+`backend/respaldos/folios_<fecha>/` (`folios.json` y las fotos), que no se sube al repositorio y se
+recupera con `python manage.py loaddata`. No toca usuarios ni turnos. Un folio que llegue por la
+ingesta mientras se ejecuta se conserva.
+
 ## Evidencia fotográfica
 
 El cliente intercepta la cámara, reescala con la API Canvas y reduce la calidad de forma iterativa

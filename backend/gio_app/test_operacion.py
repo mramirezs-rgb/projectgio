@@ -15,7 +15,9 @@ from django.utils import timezone
 from openpyxl import load_workbook
 from rest_framework import status
 
-from .models import BitacoraIncidente, Incidente, TurnoEvaluador
+from .models import (
+    BitacoraIncidente, EvidenciaIncidente, Incidente, LecturaChat, MensajeFolio, TurnoEvaluador,
+)
 from .tests import BaseGIOTestCase, UsuarioGIO, imagen_en_memoria
 
 
@@ -954,3 +956,78 @@ class ValidacionesRevisionTests(BaseGIOTestCase):
                                     {'abierto_desde': hoy, 'abierto_hasta': hoy})
         self.assertEqual(respuesta.status_code, status.HTTP_200_OK)
         self.assertGreaterEqual(respuesta.data['total'], 1)
+
+
+class BorrarFoliosTests(BaseGIOTestCase):
+    """Borrar los folios de prueba para empezar de cero, con respaldo para recuperarlos."""
+
+    def setUp(self):
+        super().setUp()
+        carpeta = tempfile.TemporaryDirectory()
+        self.addCleanup(carpeta.cleanup)
+        self.raiz = Path(carpeta.name)
+        ajuste = override_settings(MEDIA_ROOT=self.raiz / 'media',
+                                   SISA_EXPORTS_DIR=self.raiz / 'sisa_exports')
+        ajuste.enable()
+        self.addCleanup(ajuste.disable)
+        self.evidencia = EvidenciaIncidente.objects.create(
+            incidente=self.propio, imagen=imagen_en_memoria(), subido_por=self.tecnico)
+        self.mensaje = MensajeFolio.objects.create(
+            incidente=self.propio, autor=self.evaluador, texto='Voy en camino',
+            imagen=imagen_en_memoria('chat.jpg'))
+        LecturaChat.marcar(self.propio, self.tecnico, self.mensaje.pk)
+        BitacoraIncidente.registrar(self.propio, self.admin, BitacoraIncidente.Accion.ACTUALIZACION,
+                                    detalle='Prueba')
+        TurnoEvaluador.objects.create(fecha=timezone.localdate(), evaluador=self.evaluador,
+                                      hora_inicio='06:00', hora_fin='14:00')
+
+    def borrar(self, *argumentos):
+        salida = io.StringIO()
+        call_command('borrar_folios', '--carpeta', str(self.raiz / 'respaldos'), *argumentos,
+                     stdout=salida)
+        return salida.getvalue()
+
+    def test_borra_los_folios_y_deja_un_respaldo_que_se_puede_recuperar(self):
+        foto_evidencia = Path(self.evidencia.imagen.path)
+        usuarios = UsuarioGIO.objects.count()
+        salida = self.borrar('--noinput')
+
+        self.assertEqual(Incidente.objects.count(), 0)
+        for modelo in (EvidenciaIncidente, MensajeFolio, LecturaChat, BitacoraIncidente):
+            self.assertEqual(modelo.objects.count(), 0, modelo.__name__)
+        self.assertEqual(UsuarioGIO.objects.count(), usuarios)
+        self.assertEqual(TurnoEvaluador.objects.count(), 1)
+
+        respaldo = next((self.raiz / 'respaldos').glob('folios_*'))
+        self.assertIn(str(respaldo), salida)
+        self.assertFalse(foto_evidencia.exists())
+        self.assertTrue((respaldo / 'media' / self.evidencia.imagen.name).exists())
+        self.assertTrue((respaldo / 'media' / self.mensaje.imagen.name).exists())
+
+        call_command('loaddata', str(respaldo / 'folios.json'), verbosity=0)
+        self.assertEqual(Incidente.objects.count(), 2)
+        self.assertEqual(EvidenciaIncidente.objects.count(), 1)
+        self.assertEqual(MensajeFolio.objects.get().texto, 'Voy en camino')
+        self.assertEqual(BitacoraIncidente.objects.count(), 1)
+
+    def test_sin_escribir_borrar_no_se_toca_nada(self):
+        with patch('builtins.input', return_value='si'):
+            salida = self.borrar()
+        self.assertIn('no se borró nada', salida)
+        self.assertEqual(Incidente.objects.count(), 2)
+        self.assertFalse((self.raiz / 'respaldos').exists())
+
+    def test_avisa_de_liquidados_sin_enviar_y_retornos_pendientes(self):
+        liquidado('LIQ-PEND', self.tecnico, self.evaluador)
+        (self.raiz / 'sisa_exports').mkdir()
+        (self.raiz / 'sisa_exports' / 'RETORNO_SISA_20261027_110233.csv').write_text('FOLIO\n')
+        with patch('builtins.input', return_value='BORRAR'):
+            salida = self.borrar()
+        self.assertIn('1 folio(s) liquidado(s) aún no se enviaban a SISA', salida)
+        self.assertIn('1 archivo(s) RETORNO_SISA', salida)
+        self.assertEqual(Incidente.objects.count(), 0)
+
+    def test_sin_folios_no_hace_nada(self):
+        Incidente.objects.all().delete()
+        self.assertIn('No hay folios', self.borrar('--noinput'))
+        self.assertFalse((self.raiz / 'respaldos').exists())
