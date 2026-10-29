@@ -71,6 +71,9 @@ api.interceptors.request.use((config) => {
   return config
 })
 
+// Rutas que se usan sin sesión: un 401 ahí no significa que la sesión caducó.
+const RUTAS_SIN_SESION = ['/auth/login/', '/auth/refresh/', '/auth/recuperar/', '/auth/restablecer/']
+
 let refrescoEnCurso = null
 
 const refrescarToken = () => {
@@ -95,7 +98,7 @@ api.interceptors.response.use(
   (respuesta) => respuesta,
   async (error) => {
     const peticion = error.config || {}
-    const esRutaAuth = String(peticion.url || '').includes('/auth/')
+    const esRutaAuth = RUTAS_SIN_SESION.some((ruta) => String(peticion.url || '').includes(ruta))
 
     if (error.response?.status === 401 && !peticion._reintentada && !esRutaAuth) {
       peticion._reintentada = true
@@ -135,6 +138,9 @@ export const mensajeDeError = (error, respaldo = 'Ocurrió un error inesperado.'
 export const loginApi = (credenciales) => api.post('/auth/login/', credenciales)
 export const getPerfil = () => api.get('/auth/me/')
 export const cambiarPassword = (datos) => api.post('/auth/password/', datos)
+export const guardarCorreoRecuperacion = (datos) => api.post('/auth/correo/', datos)
+export const solicitarRecuperacion = (expediente) => api.post('/auth/recuperar/', { expediente })
+export const restablecerPassword = (datos) => api.post('/auth/restablecer/', datos)
 
 export const getIncidentes = (params) => api.get('/incidentes/', { params })
 export const getIncidente = (id) => api.get(`/incidentes/${id}/`)

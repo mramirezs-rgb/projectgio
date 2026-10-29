@@ -3,6 +3,7 @@ import { computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AvisosChat from './components/AvisosChat.vue'
 import BotonTema from './components/BotonTema.vue'
+import MiCuenta from './components/MiCuenta.vue'
 import { ROLES, useAuth } from './composables/useAuth.js'
 import { detenerAvisosDeChat, iniciarAvisosDeChat } from './composables/useChat.js'
 import { confirmarAccion } from './utils/alerts.js'
@@ -71,6 +72,7 @@ const salir = async () => {
           <span class="barra__rol">{{ ETIQUETAS_ROL[rol] || rol }}</span>
         </div>
         <AvisosChat />
+        <MiCuenta />
         <BotonTema />
         <button type="button" class="gio-boton gio-boton--secundario" @click="salir">Salir</button>
       </div>

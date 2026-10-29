@@ -8,6 +8,8 @@ venv/
 env/
 backend/media/
 backend/staticfiles/
+# Respaldos de borrar_folios: contienen datos de los folios
+backend/respaldos/
 
 # Datos clasificados SISA: nunca se versionan
 private_data/
