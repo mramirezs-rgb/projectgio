@@ -878,6 +878,74 @@ class CarpetaCompartidaSisaTests(BaseGIOTestCase):
         self.assertFalse(folio.exportado_sisa)
         self.assertEqual(list(self.salida.glob('*')), [])
 
+    # El reporte lo deja otra computadora en su carpeta compartida (GIO_SISA_ORIGEN).
+
+    def reporte_en_origen(self, filas, hace_segundos=600, nombre='CASE_Puebla_Reporte_Completo.xls'):
+        """Muchos sistemas exportan el .xls como tabla HTML, igual que este."""
+        carpeta = self.raiz / 'plex'
+        carpeta.mkdir(exist_ok=True)
+        ruta = carpeta / nombre
+        celdas = ''.join('<tr>' + ''.join(f'<td>{dato}</td>' for dato in fila) + '</tr>'
+                         for fila in filas)
+        ruta.write_text('<html><body><table><tr><th>FOLIO</th><th>EMPRESA</th><th>ÁREA</th></tr>'
+                        f'{celdas}</table></body></html>', encoding='utf-8')
+        marca = timezone.now().timestamp() - hace_segundos
+        os.utime(ruta, (marca, marca))
+        return ruta
+
+    def archivados(self):
+        return sorted((self.entrada / 'procesados').glob('CASE_Puebla_Reporte_Completo_*.xls'))
+
+    def test_copia_el_reporte_sin_tocar_el_original(self):
+        original = self.reporte_en_origen([('80000001', 'UNINET', 'PUEBLA')])
+        with override_settings(SISA_ORIGEN=str(original)):
+            salida = self.ingestar()
+        self.assertIn('Copiado de la carpeta compartida', salida)
+        self.assertTrue(Incidente.objects.filter(folio='80000001').exists())
+        self.assertTrue(original.exists())
+        self.assertEqual(len(self.archivados()), 1)
+
+    def test_solo_lo_vuelve_a_leer_cuando_cambia(self):
+        original = self.reporte_en_origen([('80000002', 'UNINET', 'PUEBLA')])
+        with override_settings(SISA_ORIGEN=str(original)):
+            self.ingestar()
+            self.assertIn('Sin archivos pendientes', self.ingestar())
+            self.reporte_en_origen([('80000002', 'UNINET', 'PUEBLA'),
+                                    ('80000003', 'TELMEX', 'PUEBLA')], hace_segundos=300)
+            self.ingestar()
+        self.assertTrue(Incidente.objects.filter(folio='80000003').exists())
+        self.assertEqual(len(self.archivados()), 2)
+
+    def test_espera_si_la_otra_computadora_lo_esta_escribiendo(self):
+        original = self.reporte_en_origen([('80000004', 'UNINET', 'PUEBLA')], hace_segundos=5)
+        salida = self.ingestar('--origen', str(original))
+        self.assertIn('se está actualizando', salida)
+        self.assertFalse(Incidente.objects.filter(folio='80000004').exists())
+
+    def test_si_la_otra_computadora_esta_apagada_sigue_con_lo_local(self):
+        self.depositar('local.csv', '80000005,UNINET,PUEBLA,LOS PINOS,,\n')
+        with override_settings(SISA_ORIGEN=str(self.raiz / 'apagada' / 'Reporte.xls')):
+            salida = self.ingestar()
+        self.assertIn('No se pudo leer la carpeta compartida', salida)
+        self.assertTrue(Incidente.objects.filter(folio='80000005').exists())
+
+    def test_si_el_origen_es_una_carpeta_toma_sus_reportes(self):
+        self.reporte_en_origen([('80000006', 'UNINET', 'PUEBLA')], nombre='parte_1.xls')
+        (self.raiz / 'plex' / '~$parte_1.xls').write_bytes(b'bloqueo de Excel')
+        (self.raiz / 'plex' / 'notas.txt').write_text('no es reporte')
+        self.ingestar('--origen', str(self.raiz / 'plex'))
+        self.assertTrue(Incidente.objects.filter(folio='80000006').exists())
+        self.assertFalse((self.entrada / '~$parte_1.xls').exists())
+        self.assertFalse((self.entrada / 'notas.txt').exists())
+
+    def test_dry_run_no_da_por_leido_el_reporte(self):
+        original = self.reporte_en_origen([('80000007', 'UNINET', 'PUEBLA')])
+        with override_settings(SISA_ORIGEN=str(original)):
+            self.ingestar('--dry-run')
+            self.assertFalse(Incidente.objects.filter(folio='80000007').exists())
+            self.ingestar()
+        self.assertTrue(Incidente.objects.filter(folio='80000007').exists())
+
 
 class RefrescoSisaTests(BaseGIOTestCase):
     """Lo que GIO registra no se pierde cuando el reporte SISA vuelve a traer el folio."""

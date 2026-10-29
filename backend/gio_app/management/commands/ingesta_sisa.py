@@ -1,4 +1,6 @@
+import json
 import logging
+import os
 import shutil
 import time
 from pathlib import Path
@@ -51,6 +53,10 @@ CAMPOS_DE_LIQUIDACION = ('estado_enlace', 'cve_liq', 'desc_liq', 'desc_cod4', 'd
                          'desc_cod5')
 
 
+# Qué versión de cada reporte de la carpeta compartida ya se copió (fecha de modificación y tamaño).
+ESTADO_DEL_ORIGEN = '.origen_sisa.json'
+
+
 def es_archivo_temporal(ruta):
     """Excel deja un `~$nombre.xlsx` mientras alguien tiene abierto el libro; no es un reporte."""
     return ruta.name.startswith(('~$', '.'))
@@ -72,6 +78,9 @@ class Command(BaseCommand):
         parser.add_argument('--espera', type=int, default=None, metavar='SEGUNDOS',
                             help='Omite los archivos modificados hace menos de estos segundos, que '
                                  'pueden estar copiándose (por omisión GIO_SISA_ESPERA_SEGUNDOS).')
+        parser.add_argument('--origen', metavar='RUTA',
+                            help='Reporte o carpeta en la red de donde se copian los reportes nuevos '
+                                 '(por omisión GIO_SISA_ORIGEN).')
 
     def handle(self, *args, **opciones):
         self.dry_run = opciones['dry_run']
@@ -84,9 +93,14 @@ class Command(BaseCommand):
             carpeta = rutas[0].parent
         else:
             carpeta = Path(opciones['carpeta']) if opciones['carpeta'] else settings.SISA_IMPORTS_DIR
+            espera = max(settings.SISA_ESPERA_SEGUNDOS if opciones['espera'] is None
+                         else opciones['espera'], 0)
+            origen = opciones['origen'] or settings.SISA_ORIGEN
             try:
                 carpeta.mkdir(parents=True, exist_ok=True)
-                rutas = self._listos_para_leer(carpeta, opciones['espera'])
+                if origen:
+                    self._traer_del_origen(Path(origen), carpeta, espera)
+                rutas = self._listos_para_leer(carpeta, espera)
             except OSError as error:
                 raise CommandError(
                     f'No se puede abrir la carpeta {carpeta}: {error}. Si es una carpeta de red, '
@@ -136,10 +150,59 @@ class Command(BaseCommand):
         estilo = self.style.WARNING if self.dry_run else self.style.SUCCESS
         self.stdout.write(estilo(('[DRY-RUN] ' if self.dry_run else '') + resumen))
 
+    def _traer_del_origen(self, origen, carpeta, espera):
+        """Copia a la carpeta de ingesta los reportes de la carpeta compartida que cambiaron desde
+        la última vez. El original se queda donde está: esa computadora lo sigue usando."""
+        try:
+            if origen.is_dir():
+                candidatos = sorted(r for patron in EXTENSIONES for r in origen.glob(patron)
+                                    if r.is_file() and not es_archivo_temporal(r))
+            else:
+                candidatos = [origen]
+            versiones = {ruta: [ruta.stat().st_mtime, ruta.stat().st_size] for ruta in candidatos}
+        except OSError as error:
+            # Si la otra computadora está apagada se procesa lo que ya haya en la carpeta local.
+            log.warning('No se pudo leer el origen %s: %s', origen, error)
+            self.stdout.write(self.style.WARNING(
+                f'No se pudo leer la carpeta compartida {origen} ({error}). Revise que la otra '
+                'computadora esté encendida; se reintentará en la siguiente corrida.'))
+            return
+
+        ruta_estado = carpeta / ESTADO_DEL_ORIGEN
+        try:
+            copiados = json.loads(ruta_estado.read_text(encoding='utf-8'))
+        except (OSError, ValueError):
+            copiados = {}
+        limite = time.time() - espera
+
+        for ruta, version in versiones.items():
+            if copiados.get(str(ruta)) == version:
+                continue
+            if version[0] > limite:
+                self.stdout.write(f'{ruta.name} se está actualizando en la carpeta compartida; '
+                                  'se copiará en la siguiente corrida.')
+                continue
+            destino = carpeta / ruta.name
+            temporal = destino.with_name(destino.name + '.copiando')
+            try:
+                # copy2 conserva la fecha de modificación, así que la copia se lee en esta corrida.
+                shutil.copy2(ruta, temporal)
+                os.replace(temporal, destino)
+            except OSError as error:
+                temporal.unlink(missing_ok=True)
+                self.stdout.write(self.style.WARNING(f'No se pudo copiar {ruta}: {error}'))
+                continue
+            self.stdout.write(f'Copiado de la carpeta compartida: {ruta}')
+            # En una prueba (--dry-run) no se da por leído: la siguiente corrida lo vuelve a copiar.
+            if not self.dry_run:
+                copiados[str(ruta)] = version
+
+        if not self.dry_run:
+            ruta_estado.write_text(json.dumps(copiados, indent=1), encoding='utf-8')
+
     def _listos_para_leer(self, carpeta, espera):
         """Reportes de la carpeta, sin temporales de Excel ni archivos que aún se están copiando."""
-        espera = settings.SISA_ESPERA_SEGUNDOS if espera is None else espera
-        limite = time.time() - max(espera, 0)
+        limite = time.time() - espera
         rutas = []
         for ruta in sorted(r for patron in EXTENSIONES for r in carpeta.glob(patron)):
             if es_archivo_temporal(ruta):
@@ -163,6 +226,11 @@ class Command(BaseCommand):
         destino_dir.mkdir(parents=True, exist_ok=True)
         marca = timezone.localtime().strftime('%Y%m%d_%H%M%S')
         destino = destino_dir / f'{ruta.stem}_{marca}{ruta.suffix}'
+        # Un reporte de la carpeta compartida llega siempre con el mismo nombre: no se pisa el anterior.
+        consecutivo = 1
+        while destino.exists():
+            consecutivo += 1
+            destino = destino_dir / f'{ruta.stem}_{marca}_{consecutivo}{ruta.suffix}'
         shutil.move(str(ruta), str(destino))
         self.stdout.write(f'  archivado en {destino}')
 

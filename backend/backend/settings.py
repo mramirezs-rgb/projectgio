@@ -171,6 +171,9 @@ SISA_IMPORTS_PROCESADOS_DIR = SISA_IMPORTS_DIR / 'procesados'
 SISA_EXPORTS_DIR = env_ruta('GIO_SISA_EXPORTS_DIR', PRIVATE_DATA_DIR / 'sisa_exports')
 # Segundos sin cambios que debe tener un reporte antes de leerlo: evita tomar uno que aún se copia.
 SISA_ESPERA_SEGUNDOS = env_int('GIO_SISA_ESPERA_SEGUNDOS', 60)
+# Reporte (o carpeta de reportes) que otra computadora deja en su carpeta compartida, por ejemplo
+# \\PC-SISA\reportes\Reporte.xls. La ingesta copia a sisa_imports lo que cambió, sin tocar el original.
+SISA_ORIGEN = env('GIO_SISA_ORIGEN', '')
 
 EVIDENCIA_MAX_BYTES = env_int('GIO_EVIDENCIA_MAX_BYTES', 1024 * 1024)
 EVIDENCIA_MAX_POR_FOLIO = env_int('GIO_EVIDENCIA_MAX_POR_FOLIO', 12)
