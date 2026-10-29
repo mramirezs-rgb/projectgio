@@ -176,7 +176,9 @@ folios. La exportación marca `exportado_sisa = True` en la misma transacción e
 retorno: lo escribe con otro nombre y lo renombra completo, nunca reemplaza un retorno anterior y,
 si falla, los folios siguen pendientes. Las rutas relativas de `GIO_PRIVATE_DATA_DIR` se toman desde
 `backend/`; `GIO_SISA_IMPORTS_DIR` y `GIO_SISA_EXPORTS_DIR` permiten apuntar la entrada y el retorno
-a otra carpeta, incluso de otra computadora (`\\PC-SISA\GIO_Reportes`).
+a otra carpeta, incluso de otra computadora (`\\PC-SISA\GIO_Reportes`). Si la otra computadora
+deja el reporte en su propia carpeta compartida, `GIO_SISA_ORIGEN` apunta a ese archivo o carpeta:
+la ingesta copia a `sisa_imports` solo lo que cambió desde la última vez y no toca el original.
 
 Programación sugerida en el servidor: `backend\scripts\sincronizar_sisa.bat` cada 15 minutos en el
 Programador de tareas de Windows (ejecuta la ingesta y el retorno y deja el resultado en

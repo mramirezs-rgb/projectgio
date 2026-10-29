@@ -121,21 +121,50 @@ En el Programador de tareas, revise en la tarea:
 
 ## Otra opción: la computadora de SISA comparte su carpeta
 
-Si prefieren que la carpeta viva en la otra computadora, GIO puede leerla y escribir ahí. En
-`backend\.env`:
+### El reporte está en una carpeta compartida de la otra computadora
+
+Si la otra computadora deja el reporte en su propia carpeta compartida y lo va actualizando, GIO lo
+copia de ahí. En `backend\.env` ponga la ruta del archivo (o de la carpeta, si deja varios):
+
+```ini
+GIO_SISA_ORIGEN=\\PC-SISA\reportes\Reporte_Completo.xls
+```
+
+En cada corrida, `ingesta_sisa`:
+
+1. Revisa si el reporte cambió desde la última vez (fecha de modificación y tamaño).
+2. Si cambió, lo **copia** a `private_data\sisa_imports` y procesa esa copia; el original no se
+   mueve ni se modifica, porque esa computadora lo sigue usando.
+3. Si no cambió, no hace nada. Si la otra computadora lo está escribiendo en ese momento, espera a
+   la siguiente corrida.
+
+Con una carpeta en lugar de un archivo, toma sus `.xlsx`, `.xls` y `.csv` y omite los `~$…` de Excel.
+Cada versión leída queda en `procesados`; las antiguas se pueden borrar cuando quiera.
+
+- GIO solo necesita permiso de **lectura** en esa carpeta.
+- Si la otra computadora está apagada, `sisa.log` dirá *No se pudo leer la carpeta compartida…* y
+  GIO sigue con lo demás; lo reintenta en la siguiente corrida.
+
+### Toda la entrada o el retorno en la otra computadora
+
+GIO también puede usar directamente carpetas de la otra computadora. En `backend\.env`:
 
 ```ini
 GIO_SISA_IMPORTS_DIR=\\PC-SISA\GIO_Reportes
 GIO_SISA_EXPORTS_DIR=\\PC-SISA\GIO_Retorno
 ```
 
+Aquí GIO mueve lo leído a `procesados` y escribe el retorno en esas carpetas, así que necesita
+permiso de **modificar** en ambas. Se puede usar solo `GIO_SISA_EXPORTS_DIR` junto con
+`GIO_SISA_ORIGEN` para que el retorno quede del lado de la computadora de SISA.
+
+### En los dos casos
+
 - Use siempre la ruta `\\...`, nunca una letra de unidad como `Z:`: las tareas programadas no ven
   las unidades de red asignadas.
-- La cuenta de Windows que ejecuta la tarea necesita permiso de modificar en ambas carpetas (para
-  mover lo leído a `procesados` y escribir el retorno). Inicie sesión con esa cuenta y guarde la
-  credencial una vez: `cmdkey /add:PC-SISA /user:PC-SISA\usuario /pass`.
-- Si la otra computadora está apagada, `sisa.log` dirá *No se puede abrir la carpeta…* y la tarea lo
-  reintenta en la siguiente corrida; no se pierde nada.
+- La cuenta de Windows que ejecuta la tarea debe tener guardada la credencial de la otra
+  computadora. Inicie sesión con esa cuenta y guárdela una vez:
+  `cmdkey /add:PC-SISA /user:PC-SISA\usuario /pass`.
 
 ## Lo que GIO cuida por su cuenta
 
