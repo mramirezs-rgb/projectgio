@@ -7,5 +7,16 @@ cd /d "%~dp0.."
 set PYTHONUTF8=1
 if not exist logs mkdir logs
 echo ==== %date% %time% >> logs\sisa.log
-".venv\Scripts\python.exe" manage.py ingesta_sisa >> logs\sisa.log 2>&1
-".venv\Scripts\python.exe" manage.py exportar_sisa >> logs\sisa.log 2>&1
+
+rem El entorno virtual puede estar en backend\ o en la carpeta del proyecto, con o sin punto.
+set "PYTHON=.venv\Scripts\python.exe"
+if not exist "%PYTHON%" set "PYTHON=venv\Scripts\python.exe"
+if not exist "%PYTHON%" set "PYTHON=..\.venv\Scripts\python.exe"
+if not exist "%PYTHON%" set "PYTHON=..\venv\Scripts\python.exe"
+if not exist "%PYTHON%" (
+  echo No se encontro el entorno virtual de Python: .venv o venv >> logs\sisa.log
+  exit /b 1
+)
+
+"%PYTHON%" manage.py ingesta_sisa >> logs\sisa.log 2>&1
+"%PYTHON%" manage.py exportar_sisa >> logs\sisa.log 2>&1
