@@ -97,6 +97,13 @@ class IncidenteViewSet(viewsets.ModelViewSet):
     search_fields = ['folio', 'incidente', 'empresa', 'referencia', 'cope', 'central', 'ips', 'dir_pta_a']
     ordering_fields = ['fecha_apertura', 'fecha_cierre', 'dilacion_dias', 'folio', 'estatus', 'id']
     ordering = ['-fecha_apertura']
+    # Acciones que filtran, ordenan o promedian con la dilación guardada en la base de datos.
+    ACCIONES_CON_DILACION = {'list', 'metricas', 'desempeno', 'exportar'}
+
+    def initial(self, request, *args, **kwargs):
+        super().initial(request, *args, **kwargs)
+        if self.action in self.ACCIONES_CON_DILACION:
+            Incidente.refrescar_dilaciones()
 
     def get_queryset(self):
         return queryset_por_rol(self.request.user)

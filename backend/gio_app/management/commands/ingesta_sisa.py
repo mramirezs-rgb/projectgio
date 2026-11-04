@@ -3,6 +3,7 @@ import logging
 import os
 import shutil
 import time
+from datetime import timedelta
 from pathlib import Path
 
 from django.conf import settings
@@ -356,6 +357,13 @@ class Command(BaseCommand):
                         if getattr(existente, campo) != valor:
                             setattr(existente, campo, valor)
                             cambios.append(campo)
+                    # Si SISA corrige la fecha de ingreso, la apertura y la dilación la siguen.
+                    if 'fecha_ingreso' in cambios:
+                        ahora = timezone.now()
+                        apertura = min(self._apertura(datos, ahora), existente.fecha_cierre or ahora)
+                        if apertura != existente.fecha_apertura:
+                            existente.fecha_apertura = apertura
+                            cambios.append('fecha_apertura')
                     # Solo se completa el técnico de planta interna si el folio no tiene uno.
                     if evaluador and existente.evaluador_id is None:
                         existente.evaluador = evaluador
@@ -375,10 +383,7 @@ class Command(BaseCommand):
 
                 estatus = (Incidente.Estatus.ASIGNADO if tecnico
                            else Incidente.Estatus.PENDIENTE)
-                ahora = timezone.now()
-                apertura = datos.get('fecha_ingreso') or ahora
-                if apertura > ahora:
-                    apertura = ahora
+                apertura = self._apertura(datos, timezone.now())
                 if self.dry_run:
                     nuevos += 1
                     continue
@@ -423,6 +428,13 @@ class Command(BaseCommand):
                 f'{", ".join(sorted(telefonos_vinculados))}'
             )
         return {'nuevos': nuevos, 'actualizados': actualizados, 'omitidos': omitidos}
+
+    @staticmethod
+    def _apertura(datos, ahora):
+        """La dilación se cuenta desde el ingreso a SISA. Si el reporte no trae la fecha, se deduce
+        de su columna de dilación. Nunca queda en el futuro."""
+        dias = datos.get('dilacion_sisa') or 0
+        return min(datos.get('fecha_ingreso') or ahora - timedelta(days=dias), ahora)
 
     def _mapear(self, fila):
         enlace_crudo = primer_valor(fila, ['ESTATUS I/O', 'ESTATUS IO', 'ESTADO ENLACE']).upper()

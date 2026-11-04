@@ -983,6 +983,68 @@ class RefrescoSisaTests(BaseGIOTestCase):
         self.assertEqual(folio.empresa, 'NUEVA RAZON SOCIAL')
 
 
+class DilacionAlDiaTests(BaseGIOTestCase):
+    """La dilación de un folio abierto sube cada día aunque nadie lo edite."""
+
+    def setUp(self):
+        super().setUp()
+        # Como queda tras unos días sin tocarlo: guardado con 0, aunque se abrió hace 7 días.
+        Incidente.objects.filter(pk=self.propio.pk).update(dilacion_dias=0)
+
+    def test_la_lista_filtra_y_ordena_con_la_dilacion_al_dia(self):
+        Incidente.objects.create(folio='70000020', area_operativa='PUEBLA',
+                                 fecha_apertura=timezone.now() - timedelta(days=2))
+        self.autenticar(self.admin)
+        datos = self.client.get(reverse('incidente-list'), {'ordering': '-dilacion_dias'}).data
+        self.assertEqual([(f['folio'], f['dilacion_dias']) for f in datos['results']][:2],
+                         [('12578004', 7), ('70000020', 2)])
+        filtrados = self.client.get(reverse('incidente-list'), {'dilacion_min': 5}).data
+        self.assertEqual([f['folio'] for f in filtrados['results']], ['12578004'])
+        self.propio.refresh_from_db()
+        self.assertEqual(self.propio.dilacion_dias, 7)
+
+    def test_indicadores_cuentan_la_dilacion_al_dia(self):
+        self.autenticar(self.admin)
+        datos = self.client.get(reverse('incidente-metricas')).data
+        self.assertEqual(datos['en_dilacion'], 1)
+        self.assertEqual(datos['dilacion_promedio_dias'], 3.5)  # 7 días y 0 días
+
+    def test_el_detalle_muestra_la_dilacion_al_dia(self):
+        self.autenticar(self.admin)
+        datos = self.client.get(reverse('incidente-detail', args=[self.propio.pk])).data
+        self.assertEqual((datos['dilacion_dias'], datos['semaforo']), (7, 'alerta'))
+
+    def test_un_folio_liquidado_conserva_su_dilacion(self):
+        ahora = timezone.now()
+        folio = liquidado('70000021', self.tecnico, self.evaluador,
+                          cierre=ahora - timedelta(days=7))
+        folio.fecha_apertura = ahora - timedelta(days=10)
+        folio.save()
+        self.autenticar(self.admin)
+        self.client.get(reverse('incidente-list'))
+        folio.refresh_from_db()
+        self.assertEqual(folio.dilacion_dias, 3)
+
+    def ingestar(self, encabezado, fila):
+        with tempfile.TemporaryDirectory() as carpeta:
+            ruta = Path(carpeta) / 'reporte.csv'
+            ruta.write_text(f'{encabezado}\n{fila}\n', encoding='utf-8')
+            call_command('ingesta_sisa', '--archivo', str(ruta), stdout=io.StringIO())
+
+    def test_sin_fecha_de_ingreso_usa_la_dilacion_del_reporte(self):
+        self.ingestar('FOLIO,EMPRESA,DILACION DIAS', '70000022,UNINET,4')
+        self.assertEqual(Incidente.objects.get(folio='70000022').dilacion_dias, 4)
+
+    def test_si_sisa_corrige_la_fecha_de_ingreso_la_apertura_la_sigue(self):
+        ingreso = timezone.localtime().replace(microsecond=0) - timedelta(days=12)
+        self.ingestar('FOLIO,FECHA INGRESO', f'{self.propio.folio},{ingreso:%d/%m/%Y %H:%M:%S}')
+        self.propio.refresh_from_db()
+        self.assertEqual(self.propio.fecha_apertura, ingreso)
+        self.assertEqual(self.propio.dilacion_dias, 12)
+        self.assertIn('fecha_apertura', self.propio.bitacora.get(
+            accion=BitacoraIncidente.Accion.INGESTA).detalle)
+
+
 class ValidacionesRevisionTests(BaseGIOTestCase):
     def test_liquidar_rechaza_valores_fuera_de_catalogo(self):
         self.propio.estatus = Incidente.Estatus.EN_PROCESO

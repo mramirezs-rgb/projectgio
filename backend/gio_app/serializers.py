@@ -125,6 +125,8 @@ class IncidenteSerializer(PermisosFolioMixin, serializers.ModelSerializer):
     estatus_display = serializers.CharField(source='get_estatus_display', read_only=True)
     mttr_horas = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
     horas_abierto = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
+    # Calculada al momento, igual que el semáforo, para que el número y el color coincidan.
+    dilacion_dias = serializers.IntegerField(source='calcular_dilacion', read_only=True)
     semaforo = serializers.CharField(read_only=True)
     transiciones_validas = serializers.SerializerMethodField()
     evidencias = EvidenciaIncidenteSerializer(many=True, read_only=True)
@@ -148,7 +150,7 @@ class IncidenteSerializer(PermisosFolioMixin, serializers.ModelSerializer):
             'evidencias', 'total_evidencias', 'creado_en', 'actualizado_en',
         ]
         read_only_fields = [
-            'fecha_cierre', 'dilacion_dias', 'exportado_sisa', 'estado_sincronizacion',
+            'fecha_cierre', 'exportado_sisa', 'estado_sincronizacion',
             'origen_sisa', 'creado_en', 'actualizado_en',
         ]
 
@@ -229,6 +231,8 @@ class IncidenteListaSerializer(PermisosFolioMixin, serializers.ModelSerializer):
     estatus_display = serializers.CharField(source='get_estatus_display', read_only=True)
     mttr_horas = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
     horas_abierto = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
+    # Calculada al momento, igual que el semáforo, para que el número y el color coincidan.
+    dilacion_dias = serializers.IntegerField(source='calcular_dilacion', read_only=True)
     semaforo = serializers.CharField(read_only=True)
     total_evidencias = serializers.IntegerField(source='evidencias.count', read_only=True)
     bloqueado = serializers.SerializerMethodField()
@@ -267,7 +271,7 @@ CAMPOS_EDITABLES_EVALUADOR = CAMPOS_EDITABLES_TECNICO + (
 def _solo_lectura_excepto(editables):
     declarados = {
         'tecnico_nombre', 'evaluador_nombre', 'estatus_display', 'mttr_horas', 'horas_abierto',
-        'semaforo', 'transiciones_validas', 'evidencias', 'total_evidencias',
+        'dilacion_dias', 'semaforo', 'transiciones_validas', 'evidencias', 'total_evidencias',
         'bloqueado', 'puede_cancelar_liquidacion',
     }
     return [
