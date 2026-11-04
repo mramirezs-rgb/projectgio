@@ -160,10 +160,33 @@ class Incidente(models.Model):
         return super().save(*args, **kwargs)
 
     def calcular_dilacion(self):
-        referencia = self.fecha_cierre or timezone.now()
+        """Días completos (de 24 horas) desde la apertura hasta el cierre o hasta ahora."""
         if not self.fecha_apertura:
             return 0
-        return max(0, (referencia - self.fecha_apertura).days)
+        return self._dias_entre(self.fecha_apertura, self.fecha_cierre or timezone.now())
+
+    @staticmethod
+    def _dias_entre(inicio, fin):
+        return max(0, (fin - inicio).days)
+
+    @classmethod
+    def refrescar_dilaciones(cls):
+        """Pone al día la dilación guardada de los folios abiertos; devuelve cuántos cambiaron.
+
+        En un folio abierto la dilación sube con el paso de los días aunque nadie lo edite, pero
+        solo se guarda al editarlo. Los filtros, el orden y los indicadores la leen de la base de
+        datos, así que se refresca antes de consultarla.
+        """
+        ahora = timezone.now()
+        abiertos = cls.objects.exclude(estatus=cls.Estatus.LIQUIDADO).values_list(
+            'pk', 'fecha_apertura', 'dilacion_dias')
+        cambiados = []
+        for pk, apertura, guardada in abiertos:
+            dias = cls._dias_entre(apertura, ahora)
+            if dias != guardada:
+                cambiados.append(cls(pk=pk, dilacion_dias=dias))
+        cls.objects.bulk_update(cambiados, ['dilacion_dias'], batch_size=500)
+        return len(cambiados)
 
     @property
     def mttr_horas(self):
