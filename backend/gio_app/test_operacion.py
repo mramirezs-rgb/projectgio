@@ -884,6 +884,22 @@ class CarpetaCompartidaSisaTests(BaseGIOTestCase):
         self.assertFalse(folio.exportado_sisa)
         self.assertEqual(list(self.salida.glob('*')), [])
 
+    def test_prueba_la_carpeta_de_retorno_sin_dejar_archivos_ni_marcar_folios(self):
+        # Por ejemplo, la carpeta plex de la otra computadora (GIO_SISA_EXPORTS_DIR).
+        folio = liquidado('LIQ-D', self.tecnico, self.evaluador)
+        self.salida.mkdir()
+        salida = io.StringIO()
+        call_command('exportar_sisa', '--dry-run', stdout=salida)
+        self.assertIn(f'Carpeta de retorno: {self.salida} (se puede escribir)', salida.getvalue())
+        self.assertIn('1 folio(s) listos para exportar', salida.getvalue())
+        self.assertEqual(list(self.salida.iterdir()), [])
+        folio.refresh_from_db()
+        self.assertFalse(folio.exportado_sisa)
+
+        with self.assertRaisesMessage(CommandError, 'la carpeta no existe o no se puede abrir'):
+            call_command('exportar_sisa', '--dry-run', '--carpeta', str(self.raiz / 'apagada'),
+                         stdout=io.StringIO())
+
     # El reporte lo deja otra computadora en su carpeta compartida (GIO_SISA_ORIGEN).
 
     def reporte_en_origen(self, filas, hace_segundos=600, nombre='CASE_Puebla_Reporte_Completo.xls'):

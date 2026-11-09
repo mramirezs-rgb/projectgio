@@ -170,6 +170,7 @@ python manage.py importar_tecnicos
 python manage.py importar_tecnicos --confirmar
 
 # Retorno: folios LIQUIDADO sin exportar -> private_data/sisa_exports/RETORNO_*.csv
+# (--dry-run también comprueba que se puede escribir en la carpeta de retorno)
 python manage.py exportar_sisa --dry-run
 python manage.py exportar_sisa
 ```

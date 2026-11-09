@@ -145,6 +145,39 @@ Cada versión leída queda en `procesados`; las antiguas se pueden borrar cuando
 - Si la otra computadora está apagada, `sisa.log` dirá *No se pudo leer la carpeta compartida…* y
   GIO sigue con lo demás; lo reintenta en la siguiente corrida.
 
+### El retorno en una carpeta de la otra computadora (por ejemplo, `plex`)
+
+Para que GIO deje el `RETORNO_*.csv` directamente en una carpeta de la otra computadora:
+
+1. En la otra computadora, comparta la carpeta (clic derecho → **Propiedades → Compartir → Uso
+   compartido avanzado**) y dé permiso de **cambiar** a la cuenta con la que GIO entra a esa
+   computadora (la misma que ya usa para leer el reporte, si `GIO_SISA_ORIGEN` está configurado).
+2. Desde el servidor GIO, abra la carpeta en el Explorador escribiendo su ruta, por ejemplo
+   `\\PC-SISA\plex`, y cree y borre un archivo de prueba. Si la carpeta `plex` está dentro de otra
+   carpeta compartida, la ruta es la de esa carpeta seguida de `\plex`, por ejemplo
+   `\\PC-SISA\reportes\plex`. Copie la ruta exacta de la barra de direcciones.
+3. En `backend\.env` del servidor:
+
+   ```ini
+   GIO_SISA_EXPORTS_DIR=\\PC-SISA\plex
+   ```
+
+4. Pruebe la carpeta sin generar el retorno ni marcar folios:
+
+   ```bat
+   python manage.py exportar_sisa --dry-run
+   ```
+
+   Debe decir *Carpeta de retorno: \\PC-SISA\plex (se puede escribir)*. Si dice *No se puede
+   escribir*, revise la ruta, que la otra computadora esté encendida y los permisos del paso 1.
+5. Genere el primer retorno con `python manage.py exportar_sisa`, o espere la siguiente corrida de
+   la tarea programada (cada 15 minutos).
+
+Los retornos generados antes del cambio siguen en `private_data\sisa_exports`: si aún no se
+cargaron, cópielos a mano a la nueva carpeta. GIO no los vuelve a generar, porque esos folios ya
+quedaron como enviados. Si la otra computadora está apagada cuando corre la tarea, el log dirá *No
+se pudo escribir el retorno* y los folios se envían en la siguiente corrida.
+
 ### Toda la entrada o el retorno en la otra computadora
 
 GIO también puede usar directamente carpetas de la otra computadora. En `backend\.env`:

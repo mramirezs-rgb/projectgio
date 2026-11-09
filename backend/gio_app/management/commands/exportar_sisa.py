@@ -33,6 +33,10 @@ class Command(BaseCommand):
                             help='Incluye folios ya exportados previamente.')
 
     def handle(self, *args, **opciones):
+        carpeta = Path(opciones['carpeta']) if opciones['carpeta'] else settings.SISA_EXPORTS_DIR
+        if opciones['dry_run']:
+            self._probar_carpeta(carpeta)
+
         consulta = Incidente.objects.filter(
             estatus=Incidente.Estatus.LIQUIDADO, fecha_cierre__isnull=False
         ).select_related('tecnico', 'evaluador').order_by('fecha_cierre')
@@ -74,7 +78,6 @@ class Command(BaseCommand):
             self.stdout.write(marco.head(10).to_string(index=False))
             return
 
-        carpeta = Path(opciones['carpeta']) if opciones['carpeta'] else settings.SISA_EXPORTS_DIR
         try:
             destino = self._escribir(carpeta, incidentes, marco)
         except OSError as error:
@@ -85,6 +88,22 @@ class Command(BaseCommand):
         log.info('Retorno generado en %s con %s folios', destino, len(incidentes))
         self.stdout.write(self.style.SUCCESS(
             f'Retorno generado: {destino} ({len(incidentes)} folio(s)).{promedio}'))
+
+    def _probar_carpeta(self, carpeta):
+        """Con --dry-run comprueba que se puede escribir el retorno en la carpeta, por ejemplo una de
+        otra computadora, sin dejar archivos ni marcar folios."""
+        prueba = carpeta / f'.gio_prueba_{os.getpid()}.tmp'
+        try:
+            if not carpeta.is_dir():
+                raise FileNotFoundError('la carpeta no existe o no se puede abrir')
+            prueba.write_text('prueba de escritura de GIO', encoding='utf-8')
+            prueba.unlink()
+        except OSError as error:
+            raise CommandError(
+                f'No se puede escribir el retorno en {carpeta}: {error}. Revise la ruta, que la otra '
+                'computadora esté encendida y que la cuenta que ejecuta GIO tenga permiso de '
+                'modificar esa carpeta.') from error
+        self.stdout.write(self.style.SUCCESS(f'Carpeta de retorno: {carpeta} (se puede escribir).'))
 
     def _escribir(self, carpeta, incidentes, marco):
         carpeta.mkdir(parents=True, exist_ok=True)
