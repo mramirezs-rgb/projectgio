@@ -20,7 +20,7 @@ frontend/                Cliente Vue 3 (escritorio PI + móvil PE)
 private_data/            Carpetas aisladas de intercambio SISA (no se versionan)
   sisa_imports/          Reportes de averías a ingerir
   sisa_imports/procesados/
-  sisa_exports/          Archivos RETORNO_SISA_*.csv generados
+  sisa_exports/          Archivos de retorno RETORNO_*.csv generados
 ```
 
 ## Puesta en marcha
@@ -119,6 +119,31 @@ pueden iniciar otro folio.
 Cada cambio de estatus, asignación, liquidación y carga de evidencia queda en
 `BitacoraIncidente`, que es de solo lectura en el admin y en la API.
 
+## Dilación
+
+La dilación se cuenta igual que la columna `DILACIÓN DÍAS` del reporte de SISA: **días de
+calendario** (hora del centro de México) desde el ingreso a SISA hasta hoy, o hasta el cierre si el
+folio está liquidado. Un folio que ingresó ayer a las 23:00 lleva hoy 1 día, aunque no hayan pasado
+24 horas. El semáforo pasa a alerta con `GIO_DILACION_UMBRAL_DIAS` (5) y a crítico con
+`GIO_DILACION_UMBRAL_CRITICO_DIAS` (10). El tiempo **Abierto** del detalle del folio sí son las
+horas transcurridas.
+
+La apertura de un folio es su `FECHA INGRESO` en SISA. En cada ingesta, un folio abierto cuya
+apertura no coincide con esa fecha se alinea y queda registrado en la bitácora. Un folio liquidado
+conserva la dilación con la que se cerró.
+
+Para revisar la dilación contra el reporte de SISA, en el servidor:
+
+```bash
+python manage.py comparar_dilacion
+python manage.py comparar_dilacion --archivo "C:\ruta\Reporte_Completo.xls"
+```
+
+Toma el reporte más reciente de `sisa_imports` (o de `procesados`), deduce el día en que SISA lo
+generó y muestra cuántos folios tienen la misma dilación, cuáles difieren (con su apertura en GIO y
+su ingreso en SISA), cuáles aún no están en GIO y qué folios abiertos en GIO ya no vienen en el
+reporte: esos siguen sumando en los indicadores del tablero hasta que se liquidan. No modifica nada.
+
 ## Reporte de folios
 
 Subgerencia y Gerencia descargan desde el tablero el botón **Exportar**, en Excel (`.xlsx`) o CSV
@@ -144,7 +169,7 @@ python manage.py ingesta_sisa
 python manage.py importar_tecnicos
 python manage.py importar_tecnicos --confirmar
 
-# Retorno: folios LIQUIDADO sin exportar -> private_data/sisa_exports/RETORNO_SISA_*.csv
+# Retorno: folios LIQUIDADO sin exportar -> private_data/sisa_exports/RETORNO_*.csv
 python manage.py exportar_sisa --dry-run
 python manage.py exportar_sisa
 ```
@@ -197,7 +222,7 @@ python manage.py borrar_folios
 ```
 
 El comando muestra cuántos folios, evidencias, mensajes y registros de bitácora se borrarán, avisa si
-hay folios liquidados que aún no se enviaban a SISA o archivos `RETORNO_SISA` en `sisa_exports/`, y
+hay folios liquidados que aún no se enviaban a SISA o archivos `RETORNO_*` en `sisa_exports/`, y
 pide escribir `BORRAR` para continuar. Antes de borrar guarda un respaldo en
 `backend/respaldos/folios_<fecha>/` (`folios.json` y las fotos), que no se sube al repositorio y se
 recupera con `python manage.py loaddata`. No toca usuarios ni turnos. Un folio que llegue por la

@@ -63,7 +63,7 @@ COLUMNAS = [
     ('Clave de liquidación', lambda i: i.cve_liq, TEXTO, 14),
     ('Descripción de liquidación', lambda i: i.desc_liq, TEXTO, 40),
     ('Evidencias', lambda i: i.num_evidencias, ENTERO, 10),
-    ('Exportado a SISA', lambda i: 'Sí' if i.exportado_sisa else 'No', TEXTO, 10),
+    ('Enviado en retorno', lambda i: 'Sí' if i.exportado_sisa else 'No', TEXTO, 12),
     ('Dirección', lambda i: i.dir_pta_a, TEXTO, 40),
     ('IP', lambda i: i.ips, TEXTO, 16),
 ]

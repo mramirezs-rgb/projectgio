@@ -503,6 +503,8 @@ class ExportacionReporteTests(BaseGIOTestCase):
         self.assertEqual(fila['Técnico de planta externa'], 'Luis Serrano')
         self.assertIsInstance(fila['Apertura'], datetime)
         self.assertAlmostEqual(fila['MTTR (horas)'], 3, places=1)
+        self.assertEqual(fila['Enviado en retorno'], 'No')
+        self.assertFalse([e for e in encabezados if 'SISA' in e.upper()])
         self.assertEqual(hoja.freeze_panes, 'A2')
         self.assertTrue(hoja.auto_filter.ref)
 
@@ -859,8 +861,12 @@ class CarpetaCompartidaSisaTests(BaseGIOTestCase):
         call_command('exportar_sisa', stdout=io.StringIO())
         liquidado('LIQ-B', self.tecnico, self.evaluador)
         call_command('exportar_sisa', stdout=io.StringIO())
-        archivos = sorted(self.salida.glob('RETORNO_SISA_*.csv'))
+        archivos = sorted(self.salida.glob('RETORNO_*.csv'))
         self.assertEqual(len(archivos), 2)
+        # El archivo de retorno no menciona a SISA ni en el nombre ni en el contenido.
+        for archivo in archivos:
+            self.assertNotIn('SISA', archivo.name.upper())
+            self.assertNotIn('SISA', archivo.read_text(encoding='utf-8-sig').upper())
         folios = set()
         for archivo in archivos:
             with archivo.open(encoding='utf-8-sig') as contenido:
@@ -1044,6 +1050,60 @@ class DilacionAlDiaTests(BaseGIOTestCase):
         self.assertIn('fecha_apertura', self.propio.bitacora.get(
             accion=BitacoraIncidente.Accion.INGESTA).detalle)
 
+    def test_cuenta_dias_de_calendario_como_sisa(self):
+        # Filas del reporte real (CASE Puebla, generado el 10/09/2026 a las 14:06:32): SISA cuenta
+        # los días por fecha, no por periodos de 24 horas.
+        reporte = timezone.make_aware(datetime(2026, 9, 10, 14, 6, 32))
+        filas = [('31/08/2026 13:00:06', 10), ('02/09/2026 18:46:06', 8),
+                 ('03/09/2026 16:05:06', 7), ('09/09/2026 23:45:06', 1), ('10/09/2026 09:00:00', 0)]
+        with patch('django.utils.timezone.now', return_value=reporte):
+            for ingreso, dilacion_sisa in filas:
+                apertura = timezone.make_aware(datetime.strptime(ingreso, '%d/%m/%Y %H:%M:%S'))
+                self.assertEqual(Incidente(fecha_apertura=apertura).calcular_dilacion(),
+                                 dilacion_sisa, ingreso)
+
+    def test_la_ingesta_alinea_la_apertura_de_un_folio_abierto_con_su_ingreso(self):
+        # La fecha de ingreso ya estaba guardada, pero la apertura quedó desfasada.
+        ingreso = timezone.localtime().replace(microsecond=0) - timedelta(days=12)
+        Incidente.objects.filter(pk=self.propio.pk).update(fecha_ingreso=ingreso)
+        cerrado = liquidado('70000023', self.tecnico, self.evaluador)
+        Incidente.objects.filter(pk=cerrado.pk).update(fecha_ingreso=ingreso)
+        apertura_cerrado = cerrado.fecha_apertura
+
+        self.ingestar('FOLIO,FECHA INGRESO',
+                      f'{self.propio.folio},{ingreso:%d/%m/%Y %H:%M:%S}\n'
+                      f'70000023,{ingreso:%d/%m/%Y %H:%M:%S}')
+        self.propio.refresh_from_db()
+        cerrado.refresh_from_db()
+        self.assertEqual((self.propio.fecha_apertura, self.propio.dilacion_dias), (ingreso, 12))
+        # Un folio liquidado no cambia su MTTR mientras SISA no corrija la fecha.
+        self.assertEqual(cerrado.fecha_apertura, apertura_cerrado)
+
+    def test_comparar_dilacion_con_el_reporte(self):
+        hoy = timezone.localtime().replace(microsecond=0)
+        Incidente.objects.create(folio='70000024', fecha_apertura=hoy - timedelta(days=2))
+        Incidente.objects.create(folio='70000025', empresa='FUERA SA',
+                                 fecha_apertura=hoy - timedelta(days=12))
+        filas = [(self.propio.folio, timezone.localtime(self.propio.fecha_apertura), 7),
+                 ('70000024', hoy - timedelta(days=5), 5),  # en GIO abrió 3 días después
+                 ('70000026', hoy - timedelta(days=1), 1)]  # todavía no llega a GIO
+        with tempfile.TemporaryDirectory() as carpeta:
+            ruta = Path(carpeta) / 'reporte.csv'
+            ruta.write_text('FOLIO,FECHA INGRESO,DILACION DIAS\n' + ''.join(
+                f'{folio},{ingreso:%d/%m/%Y %H:%M:%S},{dias}\n' for folio, ingreso, dias in filas),
+                encoding='utf-8')
+            salida = io.StringIO()
+            call_command('comparar_dilacion', '--archivo', str(ruta), stdout=salida)
+        texto = salida.getvalue()
+        self.assertIn(f'generado el {hoy:%d/%m/%Y}', texto)
+        self.assertIn('misma dilación en GIO y en SISA: 1', texto)
+        self.assertIn('70000024: SISA 5 d, GIO 2 d', texto)
+        self.assertIn('no están en GIO: 1', texto)
+        # 12586093 (de hoy) y 70000025 siguen abiertos en GIO aunque el reporte ya no los trae.
+        self.assertIn('no vienen en el reporte: 2 abiertos, 1 con 5 días o más, 1 con 10 o más',
+                      texto)
+        self.assertIn('70000025: 12 d, Pendiente', texto)
+
 
 class ValidacionesRevisionTests(BaseGIOTestCase):
     def test_liquidar_rechaza_valores_fuera_de_catalogo(self):
@@ -1154,7 +1214,7 @@ class BorrarFoliosTests(BaseGIOTestCase):
         with patch('builtins.input', return_value='BORRAR'):
             salida = self.borrar()
         self.assertIn('1 folio(s) liquidado(s) aún no se enviaban a SISA', salida)
-        self.assertIn('1 archivo(s) RETORNO_SISA', salida)
+        self.assertIn('1 archivo(s) de retorno', salida)
         self.assertEqual(Incidente.objects.count(), 0)
 
     def test_sin_folios_no_hace_nada(self):

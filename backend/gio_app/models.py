@@ -160,14 +160,16 @@ class Incidente(models.Model):
         return super().save(*args, **kwargs)
 
     def calcular_dilacion(self):
-        """Días completos (de 24 horas) desde la apertura hasta el cierre o hasta ahora."""
+        """Días desde la apertura hasta el cierre o hasta hoy, contados como los cuenta SISA."""
         if not self.fecha_apertura:
             return 0
         return self._dias_entre(self.fecha_apertura, self.fecha_cierre or timezone.now())
 
     @staticmethod
     def _dias_entre(inicio, fin):
-        return max(0, (fin - inicio).days)
+        """Días de calendario en hora local, no periodos de 24 horas: un folio que ingresó ayer a
+        las 23:00 lleva hoy 1 día de dilación, igual que en la columna DILACIÓN DÍAS de SISA."""
+        return max(0, (timezone.localdate(fin) - timezone.localdate(inicio)).days)
 
     @classmethod
     def refrescar_dilaciones(cls):

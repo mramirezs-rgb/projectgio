@@ -357,10 +357,13 @@ class Command(BaseCommand):
                         if getattr(existente, campo) != valor:
                             setattr(existente, campo, valor)
                             cambios.append(campo)
-                    # Si SISA corrige la fecha de ingreso, la apertura y la dilación la siguen.
-                    if 'fecha_ingreso' in cambios:
+                    # La dilación se cuenta desde el ingreso a SISA: la apertura lo sigue cuando SISA
+                    # corrige la fecha y, en un folio abierto, siempre que no coincida (por ejemplo,
+                    # uno dado de alta a mano o antes de que GIO alineara las dos fechas).
+                    ingreso = datos.get('fecha_ingreso')
+                    if ingreso and ('fecha_ingreso' in cambios or not liquidado):
                         ahora = timezone.now()
-                        apertura = min(self._apertura(datos, ahora), existente.fecha_cierre or ahora)
+                        apertura = min(ingreso, existente.fecha_cierre or ahora, ahora)
                         if apertura != existente.fecha_apertura:
                             existente.fecha_apertura = apertura
                             cambios.append('fecha_apertura')

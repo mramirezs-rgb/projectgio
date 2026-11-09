@@ -194,19 +194,19 @@ const cancelarLiquidacionFolio = async (datos) => {
 
 // El retorno lo genera el servidor (exportar_sisa) en la carpeta de intercambio; aquí se informa
 // cuántos folios liquidados lo esperan con los filtros actuales.
-const abrirSisa = () => {
+const abrirRetorno = () => {
   const pendientes = kpis.value.pendientes_exportar
   if (pendientes === null || pendientes === undefined) {
-    mostrarAdvertencia('Retorno a SISA', 'No se pudo consultar el estado del retorno a SISA.')
+    mostrarAdvertencia('Archivo de retorno', 'No se pudo consultar el estado del retorno.')
     return
   }
   mostrarInfo(
-    'Retorno a SISA',
+    'Archivo de retorno',
     pendientes
       ? `${pendientes} folio(s) liquidado(s) con los filtros actuales esperan su archivo de ` +
-          'retorno. El servidor los incluye en el siguiente RETORNO_SISA que deja en la carpeta ' +
+          'retorno. El servidor los incluye en el siguiente RETORNO que deja en la carpeta ' +
           'de intercambio.'
-      : 'Los folios liquidados con los filtros actuales ya se enviaron a SISA.',
+      : 'Los folios liquidados con los filtros actuales ya se enviaron en un archivo de retorno.',
   )
 }
 
@@ -369,7 +369,7 @@ const ordenar = async (campo) => {
         <span class="indicador__titulo">MTTR promedio</span>
         <strong class="indicador__valor">{{ formatearHoras(kpis.mttr_horas_promedio) }}</strong>
         <small v-if="kpis.pendientes_exportar">
-          {{ kpis.pendientes_exportar }} por exportar a SISA
+          {{ kpis.pendientes_exportar }} por enviar en el retorno
         </small>
       </article>
     </section>
@@ -475,9 +475,9 @@ const ordenar = async (campo) => {
           v-if="esGerencia"
           type="button"
           class="gio-boton gio-boton--secundario"
-          @click="abrirSisa"
+          @click="abrirRetorno"
         >
-          Exportaciones SISA
+          Archivo de retorno
         </button>
         <div class="conmutador" role="group" aria-label="Tipo de vista">
           <button

@@ -20,7 +20,7 @@ COLUMNAS = [
 
 
 class Command(BaseCommand):
-    help = ('Genera el archivo CSV de retorno para SISA/LSA con los folios LIQUIDADO que '
+    help = ('Genera el archivo CSV de retorno (RETORNO_<fecha>.csv) con los folios LIQUIDADO que '
             'aún no han sido exportados, calculando el MTTR en horas.')
 
     def add_arguments(self, parser):
@@ -82,7 +82,7 @@ class Command(BaseCommand):
                 f'No se pudo escribir el retorno en {carpeta}: {error}. Los folios siguen pendientes '
                 'y se exportarán en la siguiente corrida.') from error
 
-        log.info('Retorno SISA generado en %s con %s folios', destino, len(incidentes))
+        log.info('Retorno generado en %s con %s folios', destino, len(incidentes))
         self.stdout.write(self.style.SUCCESS(
             f'Retorno generado: {destino} ({len(incidentes)} folio(s)).{promedio}'))
 
@@ -119,8 +119,8 @@ class Command(BaseCommand):
     @staticmethod
     def _destino_libre(carpeta):
         """Nombre con fecha y hora que no pisa un retorno anterior, aunque se corra dos veces
-        en el mismo segundo."""
-        base = f'RETORNO_SISA_{timezone.localtime():%Y%m%d_%H%M%S}'
+        en el mismo segundo. El nombre no menciona al sistema de origen."""
+        base = f'RETORNO_{timezone.localtime():%Y%m%d_%H%M%S}'
         destino = carpeta / f'{base}.csv'
         consecutivo = 1
         while destino.exists():

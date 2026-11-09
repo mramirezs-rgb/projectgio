@@ -91,11 +91,12 @@ class Command(BaseCommand):
         if sin_enviar:
             self.stdout.write(self.style.WARNING(
                 f'{sin_enviar} folio(s) liquidado(s) aún no se enviaban a SISA y ya no se enviarán.'))
-        retornos = (list(settings.SISA_EXPORTS_DIR.glob('RETORNO_SISA_*.csv'))
+        # RETORNO_*.csv incluye también los que se generaron con el nombre anterior, RETORNO_SISA_*.
+        retornos = (list(settings.SISA_EXPORTS_DIR.glob('RETORNO_*.csv'))
                     if settings.SISA_EXPORTS_DIR.is_dir() else [])
         if retornos:
             self.stdout.write(self.style.WARNING(
-                f'Hay {len(retornos)} archivo(s) RETORNO_SISA en {settings.SISA_EXPORTS_DIR}. Si son '
+                f'Hay {len(retornos)} archivo(s) de retorno en {settings.SISA_EXPORTS_DIR}. Si son '
                 'de las pruebas, muévalos antes de que la computadora de SISA los cargue.'))
 
     @staticmethod

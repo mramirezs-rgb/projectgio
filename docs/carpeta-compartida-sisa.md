@@ -17,13 +17,13 @@ la usa el servidor. Tiene tres subcarpetas:
 | --- | --- | --- |
 | `private_data\sisa_imports\` | La computadora de SISA | Deja aquí el reporte (`.xlsx`, `.xls` o `.csv`). |
 | `private_data\sisa_imports\procesados\` | GIO | Guarda cada reporte ya leído, con fecha y hora. |
-| `private_data\sisa_exports\` | GIO | Deja aquí `RETORNO_SISA_AAAAMMDD_HHMMSS.csv` con los folios liquidados. |
+| `private_data\sisa_exports\` | GIO | Deja aquí `RETORNO_AAAAMMDD_HHMMSS.csv` con los folios liquidados. |
 
 ```
 Computadora de SISA                         Servidor GIO
 reporte.xlsx  ──── lo copia ────▶  private_data\sisa_imports\     ingesta_sisa (cada 15 min)
                                      └─ procesados\reporte_<fecha>.xlsx
-RETORNO_SISA_*.csv ◀── lo toma ──  private_data\sisa_exports\     exportar_sisa (cada 15 min)
+RETORNO_*.csv      ◀── lo toma ──  private_data\sisa_exports\     exportar_sisa (cada 15 min)
 ```
 
 Cada 15 minutos el servidor ejecuta `backend\scripts\sincronizar_sisa.bat`, que lee los reportes
@@ -189,4 +189,4 @@ permiso de **modificar** en ambas. Se puede usar solo `GIO_SISA_EXPORTS_DIR` jun
 | "Acceso denegado" | Faltan permisos | Repita el paso 3 y entre con `SERVIDOR-GIO\gio_sisa`. |
 | El reporte se queda en `sisa_imports` y el log dice *se sigue copiando* | Se modificó hace menos de 60 s | Normal: se lee en la siguiente corrida. |
 | El log dice *con error* y el reporte no se mueve | No es un reporte legible o no tiene columna FOLIO | Ábralo y revise; corrija y vuelva a dejarlo. |
-| No aparece ningún `RETORNO_SISA` | No hay folios liquidados pendientes | Normal. Gerencia lo ve en el tablero, botón **Exportaciones SISA**. |
+| No aparece ningún `RETORNO_…` | No hay folios liquidados pendientes | Normal. Gerencia lo ve en el tablero, botón **Archivo de retorno**. |

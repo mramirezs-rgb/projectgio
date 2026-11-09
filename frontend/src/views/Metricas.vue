@@ -160,7 +160,7 @@ const exportarTecnico = () => {
           <small>requieren despacho</small>
         </article>
         <article class="tarjeta gio-panel">
-          <span class="tarjeta__titulo">Pendientes de exportar a SISA</span>
+          <span class="tarjeta__titulo">Pendientes de retorno</span>
           <strong>{{ datos.pendientes_exportar }}</strong>
           <small>se envían con el robot de retorno</small>
         </article>
