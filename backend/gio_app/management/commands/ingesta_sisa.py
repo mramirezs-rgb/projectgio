@@ -16,6 +16,7 @@ from django.utils import timezone
 
 from gio_app.models import BitacoraIncidente, Incidente
 
+from gio_app.areas import asignar_areas, proponer_areas
 from ._sisa import (
     a_fecha,
     entero,
@@ -143,6 +144,16 @@ class Command(BaseCommand):
                     self.stdout.write(self.style.WARNING(
                         f'  no se pudo archivar {ruta.name} ({error}); se volverá a leer en la '
                         'siguiente corrida sin duplicar folios.'))
+
+        # Los técnicos que aún no tienen área toman la de la mayoría de sus folios. Nunca se
+        # cambia un área ya asignada.
+        if not self.dry_run and totales['archivos']:
+            asignadas = proponer_areas()
+            if asignadas:
+                asignar_areas(asignadas)
+                self.stdout.write(
+                    f'Área asignada a {len(asignadas)} técnico(s) que no la tenían: '
+                    + ', '.join(f'{usuario.expediente} -> {area}' for usuario, area in asignadas))
 
         resumen = (f"Ingesta finalizada: {totales['archivos']} archivo(s), "
                    f"{totales['nuevos']} folio(s) nuevo(s), "

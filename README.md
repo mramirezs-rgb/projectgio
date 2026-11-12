@@ -78,6 +78,23 @@ Los técnicos de planta externa y de planta interna trabajan por zona, así que 
 no la tienen. Las áreas son Puebla, Pachuca, Veracruz, Poza Rica, Jalapa, Tlaxcala, Córdoba,
 Coatzacoalcos y Quintana Roo. Subgerencia y Gerencia pueden quedar sin área.
 
+Para no asignarlas una por una, GIO deduce el área de cada técnico de los folios que atiende: la
+más frecuente entre los folios en que es técnico (planta externa) o evaluador (planta interna).
+
+```bash
+# Muestra la propuesta sin guardar nada
+python manage.py asignar_areas
+# Guarda el área de los técnicos que no la tienen
+python manage.py asignar_areas --confirmar
+# Revisa también a los que ya tienen área y la cambia si la mayoría de sus folios es de otra
+python manage.py asignar_areas --recalcular --confirmar
+```
+
+Además, **cada ingesta del reporte de SISA** asigna el área a los técnicos que aún no la tienen, con
+los folios ya actualizados, y lo anota en `sisa.log`. La ingesta nunca cambia un área ya asignada:
+eso solo lo hace `--recalcular` o la edición en **Usuarios**. Quien no tiene folios en un área
+reconocida queda sin área y el comando lo lista para asignarla a mano.
+
 Al **dar de baja** a un usuario, además de quitarle el acceso, GIO lo pasa al área **Baja**: deja de
 aparecer en su zona, en las listas de técnicos, en el reparto y en el desempeño, y en **Usuarios**
 queda al final de la lista. Sus folios históricos se conservan. Para reactivar a un técnico hay que

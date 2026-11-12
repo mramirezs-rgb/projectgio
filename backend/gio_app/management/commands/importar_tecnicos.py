@@ -9,6 +9,7 @@ from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
+from gio_app.areas import area_reconocida
 from ._sisa import es_cuenta_generica, leer_tabla, normalizar_telefono, primer_valor
 
 UsuarioGIO = get_user_model()
@@ -119,7 +120,8 @@ class Command(BaseCommand):
                     if len(nombre.split()) >= 2:
                         rol_previo, telefono_previo = nuevos.get(nombre, (rol, ''))
                         nuevos[nombre] = (rol_previo, telefono_previo or telefono_fila)
-                        if area_fila in AREAS_VALIDAS:
+                        area_fila = area_reconocida(area_fila)
+                        if area_fila:
                             areas_vistas.setdefault(nombre, Counter())[area_fila] += 1
 
         if omitidos:
@@ -132,9 +134,9 @@ class Command(BaseCommand):
                 'Todos los técnicos del reporte ya existen en GIO y tienen teléfono.'))
             return
 
-        area_fija = ' '.join((opciones['area'] or '').split()).upper()
-        if area_fija and area_fija not in AREAS_VALIDAS:
-            raise CommandError(f'El área {area_fija} no existe. Use una de: '
+        area_fija = area_reconocida(opciones['area'])
+        if opciones['area'] and not area_fija:
+            raise CommandError(f'El área {opciones["area"]} no existe. Use una de: '
                                f'{", ".join(sorted(AREAS_VALIDAS))}.')
         usados = set()
         propuestas = []

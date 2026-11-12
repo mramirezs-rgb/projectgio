@@ -424,6 +424,72 @@ class ImportacionTelefonoTecnicoTests(BaseGIOTestCase):
         self.assertEqual(self.tecnico.telefono, '')
 
 
+class AreasDeTecnicosTests(BaseGIOTestCase):
+    """Los técnicos sin área toman la de la mayoría de sus folios."""
+
+    def folio(self, numero, area, tecnico=None, evaluador=None):
+        return Incidente.objects.create(folio=f'AREA-{numero}', area_operativa=area,
+                                        tecnico=tecnico, evaluador=evaluador)
+
+    def asignar(self, *argumentos):
+        salida = io.StringIO()
+        call_command('asignar_areas', *argumentos, stdout=salida)
+        return salida.getvalue()
+
+    def area_de(self, usuario):
+        usuario.refresh_from_db()
+        return usuario.area_operativa
+
+    def test_asigna_el_area_mas_frecuente_a_planta_externa_e_interna(self):
+        self.folio(1, 'TLAXCALA', self.tecnico)
+        self.folio(2, 'TLAXCALA', self.tecnico)
+        self.folio(3, 'CÓRDOBA', evaluador=self.evaluador)
+        salida = self.asignar()
+        self.assertIn('--confirmar', salida)
+        self.assertEqual(self.area_de(self.tecnico), '')
+
+        salida = self.asignar('--confirmar')
+        # El técnico tenía un folio de Puebla y dos de Tlaxcala; el evaluador, uno y uno.
+        self.assertEqual(self.area_de(self.tecnico), 'TLAXCALA')
+        self.assertEqual(self.area_de(self.evaluador), 'CORDOBA')
+        self.assertEqual(self.area_de(self.otro_tecnico), 'VERACRUZ')
+        self.assertIn('Área asignada a 4 técnico(s)', salida)
+
+    def test_no_cambia_un_area_ya_asignada_salvo_que_se_pida(self):
+        self.tecnico.area_operativa = 'PACHUCA'
+        self.tecnico.save()
+        self.asignar('--confirmar')
+        self.assertEqual(self.area_de(self.tecnico), 'PACHUCA')
+        self.asignar('--confirmar', '--recalcular')
+        self.assertEqual(self.area_de(self.tecnico), 'PUEBLA')
+
+    def test_avisa_de_quien_no_tiene_folios_en_un_area_reconocida(self):
+        Incidente.objects.all().delete()
+        self.folio(1, 'ZONA RARA', self.tecnico)
+        salida = self.asignar('--confirmar')
+        self.assertIn('sin área y sin folios en un área reconocida', salida)
+        self.assertIn('TEC-4410', salida)
+        self.assertEqual(self.area_de(self.tecnico), '')
+
+    def test_la_ingesta_asigna_area_a_los_tecnicos_que_no_la_tenian(self):
+        Incidente.objects.all().delete()
+        self.otro_tecnico.area_operativa = 'PACHUCA'
+        self.otro_tecnico.save()
+        salida = correr('ingesta_sisa',
+                        '80000001,UNINET,TLAXCALA,CENTRO,LUIS SERRANO,\n'
+                        '80000002,UNINET,TLAXCALA,CENTRO,LUIS SERRANO,\n'
+                        '80000003,UNINET,PUEBLA,LOS PINOS,LUIS SERRANO,\n'
+                        '80000004,UNINET,PUEBLA,LOS PINOS,MARIO CAMPOS,\n')
+        self.assertIn('TEC-4410 -> TLAXCALA', salida)
+        self.assertEqual(self.area_de(self.tecnico), 'TLAXCALA')
+        self.assertEqual(self.area_de(self.otro_tecnico), 'PACHUCA')
+
+    def test_la_simulacion_de_la_ingesta_no_asigna_areas(self):
+        Incidente.objects.all().delete()
+        correr('ingesta_sisa', '80000005,UNINET,TLAXCALA,CENTRO,LUIS SERRANO,\n', '--dry-run')
+        self.assertEqual(self.area_de(self.tecnico), '')
+
+
 ENCABEZADO_OQU = 'FOLIO,EMPRESA,ÁREA,TÉCNICO ASIGNADO,OQU\n'
 
 
