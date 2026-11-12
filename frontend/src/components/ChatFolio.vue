@@ -1,9 +1,9 @@
 <script setup>
-import { nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { ROLES, useAuth } from '../composables/useAuth.js'
 import { useChat } from '../composables/useChat.js'
 import { LIMITE_BYTES, useCompresionImagen } from '../composables/useCompresionImagen.js'
-import { enviarMensaje, getMensajes, mensajeDeError } from '../services/api.js'
+import { enviarMensaje, getLecturasChat, getMensajes, mensajeDeError } from '../services/api.js'
 import { formatearBytes } from '../utils/formato.js'
 
 const props = defineProps({
@@ -45,6 +45,46 @@ const esTactil =
   typeof window !== 'undefined' && !!window.matchMedia?.('(pointer: coarse)').matches
 
 const esPropio = (mensaje) => mensaje.autor === usuario.value?.id
+
+// Quién ha abierto el chat y hasta qué mensaje: así quien escribe sabe si su mensaje ya llegó.
+const lecturas = ref([])
+const minutosParaEscalar = ref(0)
+let vueltas = 0
+
+const cargarLecturas = async () => {
+  try {
+    const { data } = await getLecturasChat(props.incidenteId)
+    lecturas.value = data.lecturas || []
+    minutosParaEscalar.value = data.minutos_para_escalar || 0
+  } catch {
+    /* se reintenta en la siguiente vuelta */
+  }
+}
+
+const nombres = (filas) =>
+  filas.map((fila) => `${fila.nombre} (${LADO_POR_ROL[fila.rol] || 'GIO'})`).join(', ')
+
+const estadoDeEntrega = computed(() => {
+  const ultimo = mensajes.value.findLast((mensaje) => esPropio(mensaje))
+  if (!ultimo) return null
+  const otros = lecturas.value.filter((fila) => fila.usuario !== usuario.value?.id)
+  const vieron = otros.filter((fila) => fila.ultimo_leido >= ultimo.id)
+  const faltan = otros.filter((fila) => fila.asignado && fila.ultimo_leido < ultimo.id)
+  const falta = faltan.length ? ` Falta que lo vea: ${nombres(faltan)}.` : ''
+  if (vieron.length) {
+    return { visto: true, texto: `Su último mensaje lo vio: ${nombres(vieron)}.${falta}` }
+  }
+  const minutos = (Date.now() - new Date(ultimo.creado_en).getTime()) / 60000
+  let escalado = ''
+  if (minutosParaEscalar.value > 0) {
+    escalado =
+      minutos >= minutosParaEscalar.value
+        ? ' GIO ya avisó a supervisión y a planta interna de turno.'
+        : ` Si nadie lo abre en ${minutosParaEscalar.value} min, GIO avisa a supervisión y a ` +
+          'planta interna de turno.'
+  }
+  return { visto: false, texto: `Nadie ha visto su último mensaje todavía.${falta}${escalado}` }
+})
 const esDeGerencia = (mensaje) => mensaje.autor_rol === ROLES.ADMIN
 
 const horaDe = (valor) => {
@@ -89,6 +129,7 @@ const cargar = async () => {
     mensajes.value = data || []
     marcarLeido(props.incidenteId)
     bajarAlFinal()
+    cargarLecturas()
   } catch (error) {
     problema.value = mensajeDeError(error, 'No se pudieron cargar los mensajes.')
   } finally {
@@ -98,6 +139,9 @@ const cargar = async () => {
 
 const buscarNuevos = async () => {
   if (document.hidden || cargando.value) return
+  // Las lecturas cambian menos que los mensajes: se revisan una de cada tres vueltas.
+  vueltas += 1
+  if (vueltas % 3 === 0) cargarLecturas()
   const ultimo = mensajes.value.at(-1)?.id
   try {
     const { data } = await getMensajes(props.incidenteId, ultimo ? { despues: ultimo } : {})
@@ -153,6 +197,7 @@ const enviar = async () => {
     texto.value = ''
     quitarFoto()
     bajarAlFinal()
+    cargarLecturas()
   } catch (error) {
     problema.value = mensajeDeError(error, 'No se pudo enviar el mensaje.')
   } finally {
@@ -170,6 +215,7 @@ const iniciar = () => {
   clearInterval(temporizador)
   mostrarChat(props.incidenteId)
   mensajes.value = []
+  lecturas.value = []
   cargar()
   temporizador = setInterval(buscarNuevos, INTERVALO_MS)
 }
@@ -241,6 +287,14 @@ watch(
       </article>
     </div>
 
+    <p
+      v-if="estadoDeEntrega"
+      class="chat__entrega"
+      :class="{ 'chat__entrega--visto': estadoDeEntrega.visto }"
+      role="status"
+    >
+      {{ estadoDeEntrega.texto }}
+    </p>
     <p v-if="problema" class="chat__problema" role="alert">{{ problema }}</p>
     <p v-if="comprimiendo" class="chat__estado">Preparando la foto…</p>
     <div v-else-if="foto" class="chat__adjunto">
@@ -359,6 +413,15 @@ watch(
   color: var(--rojo-texto);
   font-weight: 700;
   opacity: 1;
+}
+
+.chat__entrega {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--ambar-texto);
+}
+.chat__entrega--visto {
+  color: var(--verde-texto);
 }
 
 .chat__autor {

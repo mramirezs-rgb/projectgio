@@ -25,6 +25,8 @@ export default defineConfig({
       includeAssets: ['favicon.ico'],
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+        // Abre el chat del folio al tocar una notificación del sistema.
+        importScripts: ['avisos-sw.js'],
         navigateFallbackDenylist: [/^\/api/, /^\/media/, /^\/admin/],
       },
       manifest: {

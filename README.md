@@ -271,6 +271,27 @@ depende de la programación de **Turnos**: sin turnos programados nadie recibe a
 ajenos. Estos avisos y los de Gerencia para Subgerencia solo cuentan mensajes de los últimos tres
 días, para no anunciar conversaciones antiguas.
 
+**Para que un mensaje no se pierda:**
+
+- Mientras haya mensajes sin leer, bajo la barra superior queda una **franja fija** con cuántos
+  son y un botón para abrirlos; no desaparece hasta que se leen.
+- **Escalamiento.** Si pasan `GIO_CHAT_SIN_ATENDER_MINUTOS` (10 por omisión) y nadie más que su
+  autor ha abierto el chat, el mensaje se avisa también a Subgerencia, a Gerencia y a los técnicos
+  de planta interna de turno en esa zona, marcado como «sin atender». Deja de estarlo en cuanto
+  alguien lo abre. Con `0` no se escala.
+- **Acuse de lectura.** Bajo la conversación, quien escribió ve si su último mensaje ya lo vio
+  alguien, quién falta y si ya se avisó a supervisión.
+- **Sonido** al llegar un mensaje, distinto si es de Gerencia.
+- **Notificaciones del sistema.** Cada usuario las activa una vez desde el ícono de mensajes; con
+  eso el aviso aparece aunque GIO esté en otra pestaña o minimizado, y al tocarlo abre ese chat.
+  Solo funcionan si GIO se abre con `https://` (o en `localhost`); con `http://` el navegador no
+  las permite y el resto de los avisos sigue igual.
+- Si GIO deja de poder consultar al servidor, lo dice en la misma franja en lugar de quedarse
+  callado.
+
+Con GIO **cerrado** no llega nada: eso requeriría notificaciones push, que necesitan HTTPS y que el
+servidor tenga salida a internet.
+
 Cuando llega un mensaje aparece una alerta en la esquina con el folio, quién escribe y el texto; al
 tocarla se abre ese chat. En teléfonos Android además vibra, y el título de la pestaña muestra los
 mensajes sin leer, por ejemplo `(2) GIO`, aunque se esté en otra pestaña. La alerta nunca reemplaza
@@ -295,6 +316,7 @@ un diálogo abierto: espera a que se cierre. Los avisos se revisan cada 15 s y e
 | `GET/POST` | `/api/incidentes/{id}/evidencias/` | Consulta y carga de fotografías |
 | `GET` | `/api/incidentes/{id}/bitacora/` | Auditoría del folio |
 | `GET/POST` | `/api/incidentes/{id}/mensajes/` | Chat del folio (texto y foto opcional); `?despues=<id>` trae solo los nuevos |
+| `GET` | `/api/incidentes/{id}/mensajes/lecturas/` | Hasta qué mensaje leyó cada quien el chat del folio |
 | `GET` | `/api/incidentes/mensajes-pendientes/` | Mensajes sin leer por folio para quien consulta |
 | `POST` | `/api/incidentes/asignar-masivo/` | Reasignación por lote (`PI_SUB`, `ADMIN`) |
 | `GET` | `/api/incidentes/metricas/` | MTTR, dilación y carga por área y técnico |

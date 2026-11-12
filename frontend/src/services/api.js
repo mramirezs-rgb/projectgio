@@ -193,6 +193,7 @@ export const enviarMensaje = (id, datos, onProgreso) =>
       if (onProgreso && evento.total) onProgreso(Math.round((evento.loaded * 100) / evento.total))
     },
   })
+export const getLecturasChat = (id) => api.get(`/incidentes/${id}/mensajes/lecturas/`)
 export const getMensajesPendientes = () => api.get('/incidentes/mensajes-pendientes/')
 
 export const getTecnicos = (params) => api.get('/tecnicos/', { params })

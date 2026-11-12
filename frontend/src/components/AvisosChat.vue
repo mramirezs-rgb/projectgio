@@ -1,8 +1,8 @@
 <script setup>
 import { computed, onUnmounted, ref } from 'vue'
-import { useChat } from '../composables/useChat.js'
+import { activarNotificacionesDelSistema, useChat } from '../composables/useChat.js'
 
-const { total, deGerencia, recientes, irAlChat } = useChat()
+const { total, deGerencia, recientes, permisoDelSistema, sinConexion, irAlChat } = useChat()
 
 const abierto = ref(false)
 const boton = ref(null)
@@ -41,6 +41,14 @@ const alternar = () => {
 const abrirFolio = (item) => {
   cerrar()
   irAlChat(item.id)
+}
+
+const minutosDesde = (valor) =>
+  Math.max(1, Math.round((Date.now() - new Date(valor).getTime()) / 60000))
+
+const esperaDe = (valor) => {
+  const minutos = minutosDesde(valor)
+  return minutos < 60 ? `${minutos} min` : `${Math.floor(minutos / 60)} h ${minutos % 60} min`
 }
 
 const horaDe = (valor) => {
@@ -94,6 +102,23 @@ onUnmounted(cerrar)
       aria-label="Mensajes sin leer"
     >
       <p class="gio-etiqueta avisos__titulo">Mensajes sin leer</p>
+      <p v-if="sinConexion" class="avisos__nota avisos__nota--problema" role="alert">
+        Sin conexión con el servidor: los mensajes nuevos no están llegando.
+      </p>
+      <div v-if="permisoDelSistema === 'default'" class="avisos__nota">
+        <span>Reciba el aviso aunque GIO esté en otra pestaña o minimizado.</span>
+        <button
+          type="button"
+          class="gio-boton gio-boton--secundario"
+          @click="activarNotificacionesDelSistema"
+        >
+          Activar notificaciones
+        </button>
+      </div>
+      <p v-else-if="permisoDelSistema === 'denied'" class="avisos__nota">
+        Las notificaciones del sistema están bloqueadas para GIO en este navegador; se activan en
+        los permisos del sitio.
+      </p>
       <p v-if="!recientes.length" class="avisos__vacio">No hay mensajes nuevos.</p>
       <ul v-else class="avisos__lista">
         <li v-for="item in recientes" :key="item.id">
@@ -105,6 +130,9 @@ onUnmounted(cerrar)
           >
             <span v-if="item.de_gerencia" class="avisos__prioridad">
               Gerencia · {{ item.de_gerencia }} mensaje(s) prioritario(s)
+            </span>
+            <span v-else-if="item.sin_atender" class="avisos__olvidado">
+              Sin atender · nadie lo ha leído en {{ esperaDe(item.sin_atender_desde) }}
             </span>
             <span class="avisos__fila">
               <strong class="avisos__folio">{{ item.folio }}</strong>
@@ -159,6 +187,32 @@ onUnmounted(cerrar)
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
+  color: var(--rojo-texto);
+}
+
+.avisos__olvidado {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ambar-texto);
+}
+
+.avisos__nota {
+  margin: 0 0 8px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  border: 1px solid var(--borde);
+  font-size: 0.8125rem;
+  color: var(--apagado);
+}
+
+.avisos__nota--problema {
+  border-color: rgb(239 68 68 / 0.4);
+  background: rgb(239 68 68 / 0.12);
   color: var(--rojo-texto);
 }
 

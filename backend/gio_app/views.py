@@ -20,7 +20,7 @@ from usuarios.permissions import (
     PuedeAsignar, PuedeCrearIncidente, PuedeEditarIncidente, PuedeExportar,
 )
 
-from .chat import mensajes_pendientes
+from .chat import lecturas_del_chat, mensajes_pendientes
 from .desempeno import AREAS_DE_DESEMPENO, desempeno_de_campo
 from .exportacion import MAX_FILAS, generar_csv, generar_xlsx, nombre_de_archivo
 from .filters import IncidenteFilter
@@ -102,7 +102,7 @@ class IncidenteViewSet(viewsets.ModelViewSet):
     ACCIONES_CON_DILACION = {'list', 'metricas', 'detalle_de_metricas', 'desempeno', 'exportar'}
     # Un técnico de planta interna puede revisar cualquier folio y su chat para apoyar a quien
     # está de descanso; modificarlo sigue reservado a quien lo tiene asignado.
-    ACCIONES_DE_APOYO = {'retrieve', 'mensajes', 'evidencias', 'bitacora'}
+    ACCIONES_DE_APOYO = {'retrieve', 'mensajes', 'lecturas', 'evidencias', 'bitacora'}
 
     def initial(self, request, *args, **kwargs):
         super().initial(request, *args, **kwargs)
@@ -295,6 +295,11 @@ class IncidenteViewSet(viewsets.ModelViewSet):
             LecturaChat.marcar(incidente, request.user, mensajes[-1].pk)
         return Response(MensajeFolioSerializer(mensajes, many=True,
                                                context={'request': request}).data)
+
+    @action(detail=True, methods=['get'], url_path='mensajes/lecturas', throttle_scope='chat')
+    def lecturas(self, request, pk=None):
+        """Quién ha visto el chat y hasta qué mensaje, para saber si un mensaje ya llegó."""
+        return Response(lecturas_del_chat(self.get_object()))
 
     @action(detail=False, methods=['get'], url_path='mensajes-pendientes')
     def pendientes_de_chat(self, request):

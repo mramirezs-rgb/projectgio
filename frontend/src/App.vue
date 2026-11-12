@@ -3,6 +3,7 @@ import { computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AvisosChat from './components/AvisosChat.vue'
 import BotonTema from './components/BotonTema.vue'
+import FranjaMensajes from './components/FranjaMensajes.vue'
 import MiCuenta from './components/MiCuenta.vue'
 import { ROLES, useAuth } from './composables/useAuth.js'
 import { detenerAvisosDeChat, iniciarAvisosDeChat } from './composables/useChat.js'
@@ -12,11 +13,9 @@ const route = useRoute()
 const router = useRouter()
 const { estaAutenticado, usuario, rol, permisos, cerrarSesion } = useAuth()
 
-watch(
-  estaAutenticado,
-  (activo) => (activo ? iniciarAvisosDeChat() : detenerAvisosDeChat()),
-  { immediate: true },
-)
+watch(estaAutenticado, (activo) => (activo ? iniciarAvisosDeChat() : detenerAvisosDeChat()), {
+  immediate: true,
+})
 
 const ETIQUETAS_ROL = {
   [ROLES.TECNICO]: 'Técnico de planta externa',
@@ -37,7 +36,8 @@ const enlaces = computed(() => {
 })
 
 const salir = async () => {
-  if (!(await confirmarAccion('Cerrar sesión', '¿Desea salir del sistema GIO?', 'Sí, salir'))) return
+  if (!(await confirmarAccion('Cerrar sesión', '¿Desea salir del sistema GIO?', 'Sí, salir')))
+    return
   cerrarSesion()
   router.replace({ name: 'login' })
 }
@@ -45,38 +45,43 @@ const salir = async () => {
 
 <template>
   <div class="app-raiz">
-    <header v-if="estaAutenticado" class="barra">
-      <div class="barra__marca">
-        <span class="insignia">GIO</span>
-        <div class="barra__titulos">
-          <strong>Gestión de Incidencias y Enlace Operativo</strong>
-          <small>CASE Puebla</small>
+    <div v-if="estaAutenticado" class="cabecera">
+      <header class="barra">
+        <div class="barra__marca">
+          <span class="insignia">GIO</span>
+          <div class="barra__titulos">
+            <strong>Gestión de Incidencias y Enlace Operativo</strong>
+            <small>CASE Puebla</small>
+          </div>
         </div>
-      </div>
 
-      <nav class="barra__nav" aria-label="Secciones">
-        <RouterLink
-          v-for="enlace in enlaces"
-          :key="enlace.nombre"
-          :to="{ name: enlace.nombre }"
-          class="barra__enlace"
-          :class="{ 'barra__enlace--activo': route.name === enlace.nombre }"
-        >
-          {{ enlace.texto }}
-        </RouterLink>
-      </nav>
+        <nav class="barra__nav" aria-label="Secciones">
+          <RouterLink
+            v-for="enlace in enlaces"
+            :key="enlace.nombre"
+            :to="{ name: enlace.nombre }"
+            class="barra__enlace"
+            :class="{ 'barra__enlace--activo': route.name === enlace.nombre }"
+          >
+            {{ enlace.texto }}
+          </RouterLink>
+        </nav>
 
-      <div class="barra__usuario">
-        <div class="barra__identidad">
-          <span class="barra__nombre">{{ usuario?.nombre || usuario?.expediente }}</span>
-          <span class="barra__rol">{{ ETIQUETAS_ROL[rol] || rol }}</span>
+        <div class="barra__usuario">
+          <div class="barra__identidad">
+            <span class="barra__nombre">{{ usuario?.nombre || usuario?.expediente }}</span>
+            <span class="barra__rol">{{ ETIQUETAS_ROL[rol] || rol }}</span>
+          </div>
+          <AvisosChat />
+          <MiCuenta />
+          <BotonTema />
+          <button type="button" class="gio-boton gio-boton--secundario" @click="salir">
+            Salir
+          </button>
         </div>
-        <AvisosChat />
-        <MiCuenta />
-        <BotonTema />
-        <button type="button" class="gio-boton gio-boton--secundario" @click="salir">Salir</button>
-      </div>
-    </header>
+      </header>
+      <FranjaMensajes />
+    </div>
 
     <BotonTema v-else class="tema-flotante" />
 
@@ -103,6 +108,10 @@ const salir = async () => {
   background-color: var(--barra);
   color: var(--sobre-barra);
   border-bottom: 1px solid var(--barra-borde);
+}
+
+/* La barra y la franja de mensajes sin leer se quedan arriba al desplazar la página. */
+.cabecera {
   position: sticky;
   top: 0;
   z-index: 40;

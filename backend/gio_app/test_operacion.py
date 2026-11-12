@@ -761,6 +761,64 @@ class ChatFolioTests(BaseGIOTestCase):
         self.assertEqual(avisos['recientes'][0]['ultimo']['texto'],
                          'Atiendan este folio hoy mismo')
 
+    def envejecer(self, minutos):
+        MensajeFolio.objects.update(creado_en=timezone.now() - timedelta(minutes=minutos))
+
+    def test_lo_que_nadie_lee_se_escala_a_supervision_y_a_quien_esta_de_turno(self):
+        self.escribir(self.tecnico, 'Necesito apoyo y nadie contesta')
+        for usuario in (self.sub, self.admin):
+            self.assertEqual(self.pendientes(usuario)['total'], 0)
+
+        self.envejecer(11)
+        for usuario in (self.sub, self.admin):
+            avisos = self.pendientes(usuario)
+            self.assertEqual(avisos['sin_atender'], 1, usuario.expediente)
+            self.assertEqual(avisos['recientes'][0]['sin_atender'], 1)
+            self.assertIsNotNone(avisos['recientes'][0]['sin_atender_desde'])
+        # Planta interna de otra zona no; la de turno en esa zona sí.
+        self.turno_hoy(self.otro_evaluador)
+        self.turno_hoy(self.evaluador)
+        self.otro_evaluador.area_operativa = 'VERACRUZ'
+        self.otro_evaluador.save()
+        self.assertEqual(self.pendientes(self.otro_evaluador)['total'], 0)
+        self.otro_evaluador.area_operativa = 'PUEBLA'
+        self.otro_evaluador.save()
+        self.assertEqual(self.pendientes(self.otro_evaluador)['sin_atender'], 1)
+        self.assertEqual(self.pendientes(self.otro_tecnico)['total'], 0)
+
+        # En cuanto alguien más lo lee, deja de estar escalado para los demás.
+        self.autenticar(self.evaluador)
+        self.client.get(self.url)
+        for usuario in (self.sub, self.admin, self.otro_evaluador):
+            self.assertEqual(self.pendientes(usuario)['total'], 0, usuario.expediente)
+
+    def test_el_plazo_de_escalamiento_se_configura_y_se_puede_apagar(self):
+        self.escribir(self.tecnico, 'Sigo esperando')
+        self.envejecer(11)
+        with override_settings(CHAT_SIN_ATENDER_MINUTOS=30):
+            self.assertEqual(self.pendientes(self.sub)['total'], 0)
+        with override_settings(CHAT_SIN_ATENDER_MINUTOS=0):
+            self.assertEqual(self.pendientes(self.sub)['total'], 0)
+        self.assertEqual(self.pendientes(self.sub)['total'], 1)
+
+    def test_el_chat_dice_quien_ya_vio_los_mensajes(self):
+        url = reverse('incidente-lecturas', args=[self.propio.pk])
+        mensaje = self.escribir(self.tecnico, 'Ya estoy en sitio').data['id']
+        datos = self.client.get(url).data
+        por_usuario = {fila['usuario']: fila for fila in datos['lecturas']}
+        self.assertEqual(por_usuario[self.tecnico.pk]['ultimo_leido'], mensaje)
+        self.assertEqual(por_usuario[self.evaluador.pk]['ultimo_leido'], 0)
+        self.assertTrue(por_usuario[self.evaluador.pk]['asignado'])
+        self.assertEqual(datos['minutos_para_escalar'], 10)
+
+        self.autenticar(self.sub)
+        self.client.get(self.url)
+        por_usuario = {fila['usuario']: fila for fila in self.client.get(url).data['lecturas']}
+        self.assertEqual(por_usuario[self.sub.pk]['ultimo_leido'], mensaje)
+        self.assertFalse(por_usuario[self.sub.pk]['asignado'])
+        self.autenticar(self.otro_tecnico)
+        self.assertEqual(self.client.get(url).status_code, status.HTTP_404_NOT_FOUND)
+
     def test_un_folio_sin_tecnico_de_planta_interna_avisa_a_quien_esta_de_turno(self):
         self.propio.evaluador = None
         self.propio.save()
