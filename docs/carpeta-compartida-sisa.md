@@ -1,7 +1,9 @@
 # Intercambio de archivos SISA por la red
 
-Guía para que el reporte de SISA llegue desde otra computadora al servidor GIO y para que el archivo
-de retorno regrese a la misma carpeta, sin pasarlo a mano.
+Guía para que el reporte de SISA llegue desde otra computadora al servidor GIO sin pasarlo a mano.
+
+> El archivo de retorno hacia SISA (`RETORNO_SISA_*.csv`) está retirado por ahora; se retomará
+> más adelante. GIO solo lee el reporte de SISA.
 
 ## Cómo funciona
 
@@ -11,24 +13,21 @@ un usuario con permiso la abre desde el Explorador como si fuera una carpeta pro
 hacen hoy cuando "les pasan el archivo por la red".
 
 La "carpeta secreta" de GIO es `private_data/`. No se sube a GitHub (está en `.gitignore`) y solo
-la usa el servidor. Tiene tres subcarpetas:
+la usa el servidor. Tiene dos subcarpetas en uso:
 
 | Carpeta | Quién escribe | Para qué |
 | --- | --- | --- |
 | `private_data\sisa_imports\` | La computadora de SISA | Deja aquí el reporte (`.xlsx`, `.xls` o `.csv`). |
 | `private_data\sisa_imports\procesados\` | GIO | Guarda cada reporte ya leído, con fecha y hora. |
-| `private_data\sisa_exports\` | GIO | Deja aquí `RETORNO_SISA_AAAAMMDD_HHMMSS.csv` con los folios liquidados. |
 
 ```
 Computadora de SISA                         Servidor GIO
 reporte.xlsx  ──── lo copia ────▶  private_data\sisa_imports\     ingesta_sisa (cada 15 min)
                                      └─ procesados\reporte_<fecha>.xlsx
-RETORNO_SISA_*.csv ◀── lo toma ──  private_data\sisa_exports\     exportar_sisa (cada 15 min)
 ```
 
 Cada 15 minutos el servidor ejecuta `backend\scripts\sincronizar_sisa.bat`, que lee los reportes
-nuevos, da de alta o actualiza los folios, mueve el reporte a `procesados\` y genera el retorno con
-los folios liquidados que aún no se habían enviado.
+nuevos, da de alta o actualiza los folios y mueve el reporte a `procesados\`.
 
 ## Opción recomendada: el servidor GIO comparte `private_data`
 
@@ -90,8 +89,6 @@ En el servidor:
    credenciales**.
 3. Guarde o copie el reporte en `sisa_imports`. El nombre da igual y puede ser siempre el mismo: GIO
    lo mueve a `procesados` en cuanto lo lee.
-4. Recoja el retorno en `sisa_exports`. Después de cargarlo en SISA, puede moverlo a una subcarpeta
-   (por ejemplo `sisa_exports\cargados`) para saber cuáles ya se procesaron; GIO no lee esa carpeta.
 
 Si en esa computadora un programa o script deja el reporte de forma automática, guarde antes las
 credenciales para la cuenta que lo ejecuta:
@@ -145,18 +142,16 @@ Cada versión leída queda en `procesados`; las antiguas se pueden borrar cuando
 - Si la otra computadora está apagada, `sisa.log` dirá *No se pudo leer la carpeta compartida…* y
   GIO sigue con lo demás; lo reintenta en la siguiente corrida.
 
-### Toda la entrada o el retorno en la otra computadora
+### Toda la entrada en la otra computadora
 
-GIO también puede usar directamente carpetas de la otra computadora. En `backend\.env`:
+GIO también puede usar directamente una carpeta de la otra computadora. En `backend\.env`:
 
 ```ini
 GIO_SISA_IMPORTS_DIR=\\PC-SISA\GIO_Reportes
-GIO_SISA_EXPORTS_DIR=\\PC-SISA\GIO_Retorno
 ```
 
-Aquí GIO mueve lo leído a `procesados` y escribe el retorno en esas carpetas, así que necesita
-permiso de **modificar** en ambas. Se puede usar solo `GIO_SISA_EXPORTS_DIR` junto con
-`GIO_SISA_ORIGEN` para que el retorno quede del lado de la computadora de SISA.
+Aquí GIO mueve lo leído a `procesados` dentro de esa carpeta, así que necesita permiso de
+**modificar** en ella.
 
 ### En los dos casos
 
@@ -174,9 +169,6 @@ permiso de **modificar** en ambas. Se puede usar solo `GIO_SISA_EXPORTS_DIR` jun
   libro abierto.
 - **Archivo bloqueado**: si no puede moverlo a `procesados` porque está abierto en otra
   computadora, lo vuelve a leer después sin duplicar folios.
-- **Retorno completo o nada**: el CSV se escribe con otro nombre y se renombra ya terminado, así la
-  otra computadora nunca toma uno a medias. Nunca reemplaza un retorno anterior y, si no puede
-  escribirlo, los folios siguen pendientes para la siguiente corrida.
 - **La liquidación manda**: si el reporte de SISA sigue trayendo un folio que ya se liquidó en GIO,
   no se reemplazan su clave, su descripción de liquidación ni el estado del enlace.
 - **`.xls` que en realidad son páginas web**: muchos sistemas exportan así; GIO también los lee.
@@ -189,4 +181,4 @@ permiso de **modificar** en ambas. Se puede usar solo `GIO_SISA_EXPORTS_DIR` jun
 | "Acceso denegado" | Faltan permisos | Repita el paso 3 y entre con `SERVIDOR-GIO\gio_sisa`. |
 | El reporte se queda en `sisa_imports` y el log dice *se sigue copiando* | Se modificó hace menos de 60 s | Normal: se lee en la siguiente corrida. |
 | El log dice *con error* y el reporte no se mueve | No es un reporte legible o no tiene columna FOLIO | Ábralo y revise; corrija y vuelva a dejarlo. |
-| No aparece ningún `RETORNO_SISA` | No hay folios liquidados pendientes | Normal. Gerencia lo ve en el tablero, botón **Exportaciones SISA**. |
+| No aparece ningún `RETORNO_SISA` | El retorno a SISA está retirado por ahora | Normal: GIO ya no lo genera. |

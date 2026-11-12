@@ -87,10 +87,6 @@ class Command(BaseCommand):
             f'el contenido de "{respaldo / "media"}" a "{settings.MEDIA_ROOT}".')
 
     def _avisar_pendientes_de_sisa(self, folios):
-        sin_enviar = folios.filter(estatus=Incidente.Estatus.LIQUIDADO, exportado_sisa=False).count()
-        if sin_enviar:
-            self.stdout.write(self.style.WARNING(
-                f'{sin_enviar} folio(s) liquidado(s) aún no se enviaban a SISA y ya no se enviarán.'))
         retornos = (list(settings.SISA_EXPORTS_DIR.glob('RETORNO_SISA_*.csv'))
                     if settings.SISA_EXPORTS_DIR.is_dir() else [])
         if retornos:

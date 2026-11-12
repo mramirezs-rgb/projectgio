@@ -46,13 +46,6 @@
       "command": "python manage.py ingesta_sisa --dry-run",
       "options": { "cwd": "${workspaceFolder}/backend" },
       "problemMatcher": []
-    },
-    {
-      "label": "SISA: retorno (simulacion)",
-      "type": "shell",
-      "command": "python manage.py exportar_sisa --dry-run",
-      "options": { "cwd": "${workspaceFolder}/backend" },
-      "problemMatcher": []
     }
   ]
 }

@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import DetalleIndicador from '../components/DetalleIndicador.vue'
 import IncidenteModal from '../components/IncidenteModal.vue'
 import KanbanBoard from '../components/KanbanBoard.vue'
 import TablaIncidentes from '../components/TablaIncidentes.vue'
@@ -22,7 +23,6 @@ import {
   mostrarAdvertencia,
   mostrarError,
   mostrarExito,
-  mostrarInfo,
   notificar,
 } from '../utils/alerts.js'
 import { descargarArchivo, formatearHoras, marcaDeTiempo } from '../utils/formato.js'
@@ -192,22 +192,12 @@ const cancelarLiquidacionFolio = async (datos) => {
   }
 }
 
-// El retorno lo genera el servidor (exportar_sisa) en la carpeta de intercambio; aquí se informa
-// cuántos folios liquidados lo esperan con los filtros actuales.
-const abrirSisa = () => {
-  const pendientes = kpis.value.pendientes_exportar
-  if (pendientes === null || pendientes === undefined) {
-    mostrarAdvertencia('Retorno a SISA', 'No se pudo consultar el estado del retorno a SISA.')
-    return
-  }
-  mostrarInfo(
-    'Retorno a SISA',
-    pendientes
-      ? `${pendientes} folio(s) liquidado(s) con los filtros actuales esperan su archivo de ` +
-          'retorno. El servidor los incluye en el siguiente RETORNO_SISA que deja en la carpeta ' +
-          'de intercambio.'
-      : 'Los folios liquidados con los filtros actuales ya se enviaron a SISA.',
-  )
+// El indicador de dilación abre su detalle con los filtros y la búsqueda del tablero.
+const detalleDilacion = ref(false)
+const filtrosDeIndicadores = () => {
+  const params = parametrosDeExportacion()
+  delete params.ordering
+  return params
 }
 
 const guardar = async (datos) => {
@@ -358,19 +348,27 @@ const ordenar = async (campo) => {
           }}
         </strong>
       </article>
-      <article class="indicador indicador--alerta gio-panel">
-        <span class="indicador__titulo">
-          Dilación ≥ {{ kpis.umbral_dilacion_dias ?? 5 }} días
-        </span>
-        <strong class="indicador__valor indicador__valor--rojo">{{ kpis.en_dilacion ?? 0 }}</strong>
-        <small>{{ kpis.criticos ?? 0 }} en nivel crítico</small>
-      </article>
+      <button
+        type="button"
+        class="indicador indicador--alerta indicador--boton gio-panel"
+        title="Ver el detalle de la dilación"
+        @click="detalleDilacion = true"
+      >
+        <span class="indicador__titulo">Dilación mayor</span>
+        <strong class="indicador__valor indicador__valor--rojo">
+          {{ kpis.dilacion_maxima_dias ?? 0 }}
+          <span class="indicador__unidad">
+            {{ kpis.dilacion_maxima_dias === 1 ? 'día' : 'días' }}
+          </span>
+        </strong>
+        <small>
+          {{ kpis.en_dilacion ?? 0 }} folio(s) con {{ kpis.umbral_dilacion_dias ?? 5 }} días o más
+          · {{ kpis.criticos ?? 0 }} crítico(s)
+        </small>
+      </button>
       <article class="indicador gio-panel">
         <span class="indicador__titulo">MTTR promedio</span>
         <strong class="indicador__valor">{{ formatearHoras(kpis.mttr_horas_promedio) }}</strong>
-        <small v-if="kpis.pendientes_exportar">
-          {{ kpis.pendientes_exportar }} por exportar a SISA
-        </small>
       </article>
     </section>
 
@@ -470,14 +468,6 @@ const ordenar = async (campo) => {
           @click="exportar"
         >
           {{ exportando ? 'Exportando…' : 'Exportar' }}
-        </button>
-        <button
-          v-if="esGerencia"
-          type="button"
-          class="gio-boton gio-boton--secundario"
-          @click="abrirSisa"
-        >
-          Exportaciones SISA
         </button>
         <div class="conmutador" role="group" aria-label="Tipo de vista">
           <button
@@ -587,6 +577,13 @@ const ordenar = async (campo) => {
       @liquidar="liquidar"
       @cancelar-liquidacion="cancelarLiquidacionFolio"
     />
+
+    <DetalleIndicador
+      v-if="detalleDilacion"
+      indicador="dilacion"
+      :filtros="filtrosDeIndicadores()"
+      @close="detalleDilacion = false"
+    />
   </div>
 </template>
 
@@ -631,6 +628,24 @@ const ordenar = async (campo) => {
 
 .indicador__valor--rojo {
   color: var(--rojo-vivo);
+}
+
+.indicador__unidad {
+  font-size: 0.8rem;
+  font-weight: 400;
+}
+
+.indicador--boton {
+  text-align: left;
+  font: inherit;
+  color: var(--texto);
+  cursor: pointer;
+  transition: background-color var(--rapido) var(--curva);
+}
+
+.indicador--boton:hover,
+.indicador--boton:focus-visible {
+  background-color: var(--panel-alto);
 }
 
 .indicador small {

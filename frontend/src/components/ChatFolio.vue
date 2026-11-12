@@ -45,6 +45,7 @@ const esTactil =
   typeof window !== 'undefined' && !!window.matchMedia?.('(pointer: coarse)').matches
 
 const esPropio = (mensaje) => mensaje.autor === usuario.value?.id
+const esDeGerencia = (mensaje) => mensaje.autor_rol === ROLES.ADMIN
 
 const horaDe = (valor) => {
   const fecha = new Date(valor)
@@ -212,7 +213,10 @@ watch(
         v-for="mensaje in mensajes"
         :key="mensaje.id"
         class="chat__mensaje"
-        :class="{ 'chat__mensaje--propio': esPropio(mensaje) }"
+        :class="{
+          'chat__mensaje--propio': esPropio(mensaje),
+          'chat__mensaje--gerencia': esDeGerencia(mensaje) && !esPropio(mensaje),
+        }"
       >
         <header class="chat__autor">
           <strong>{{ esPropio(mensaje) ? 'Usted' : mensaje.autor_nombre }}</strong>
@@ -346,6 +350,15 @@ watch(
   align-self: flex-end;
   background-color: var(--acento);
   color: var(--sobre-acento);
+}
+/* Los mensajes de Gerencia son prioritarios: se distinguen del resto de la conversación. */
+.chat__mensaje--gerencia {
+  border-left: 3px solid var(--peligro);
+}
+.chat__mensaje--gerencia .chat__autor span {
+  color: var(--rojo-texto);
+  font-weight: 700;
+  opacity: 1;
 }
 
 .chat__autor {

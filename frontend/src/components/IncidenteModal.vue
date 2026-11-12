@@ -31,6 +31,7 @@ const AREAS_BASE = [
   'TLAXCALA',
   'CORDOBA',
   'COATZACOALCOS',
+  'QUINTANA ROO',
 ]
 
 const TIPOS_SERVICIO = [
@@ -65,7 +66,10 @@ const esEvaluador = computed(() => props.rol === 'PI_EVALUADOR')
 const visionGlobal = computed(() => !!props.permisos.vision_global)
 
 // Un folio liquidado queda bloqueado para casi todos; el backend indica si aplica para quien consulta.
-const bloqueado = computed(() => !!props.modelo?.bloqueado)
+// También queda de solo lectura para el técnico de planta interna que revisa un folio de otro:
+// puede consultarlo y usar el chat, no modificarlo.
+const enApoyo = computed(() => !!props.modelo?.en_apoyo)
+const bloqueado = computed(() => !!props.modelo?.bloqueado || enApoyo.value)
 const puedeCancelarLiquidacion = computed(
   () => props.editando && !!props.modelo?.puede_cancelar_liquidacion,
 )
@@ -299,7 +303,11 @@ onUnmounted(() => document.removeEventListener('keydown', alPulsarTecla))
         </button>
       </header>
 
-      <p v-if="bloqueado" class="caja__aviso" role="status">
+      <p v-if="enApoyo" class="caja__aviso" role="status">
+        Este folio está asignado a otro técnico de planta interna. Puede revisarlo y responder en
+        el chat; para modificarlo, pida a Subgerencia que se lo reasigne.
+      </p>
+      <p v-else-if="bloqueado" class="caja__aviso" role="status">
         Folio liquidado: no admite cambios. Solo Gerencia puede modificarlo.
       </p>
 

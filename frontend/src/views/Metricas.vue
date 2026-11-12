@@ -1,5 +1,6 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
+import DetalleIndicador from '../components/DetalleIndicador.vue'
 import { COLUMNAS_KANBAN } from '../composables/useIncidentes.js'
 import { getAreas, getMetricas, mensajeDeError } from '../services/api.js'
 import { mostrarAdvertencia, notificar } from '../utils/alerts.js'
@@ -12,13 +13,20 @@ const areas = ref([])
 
 const filtros = reactive({ area_operativa: '', abierto_desde: '', abierto_hasta: '' })
 
+// Indicador cuyo detalle está abierto; se consulta con los mismos filtros de la pantalla.
+const indicadorAbierto = ref('')
+
+const filtrosActivos = () => {
+  const params = {}
+  for (const [clave, valor] of Object.entries(filtros)) if (valor) params[clave] = valor
+  return params
+}
+
 const cargar = async () => {
   cargando.value = true
   problema.value = ''
   try {
-    const params = {}
-    for (const [clave, valor] of Object.entries(filtros)) if (valor) params[clave] = valor
-    const { data } = await getMetricas(params)
+    const { data } = await getMetricas(filtrosActivos())
     datos.value = data
   } catch (error) {
     problema.value = mensajeDeError(error, 'No se pudieron calcular las métricas.')
@@ -131,39 +139,46 @@ const exportarTecnico = () => {
 
     <template v-else-if="datos">
       <section class="tarjetas">
-        <article class="tarjeta gio-panel">
+        <button type="button" class="tarjeta gio-panel" @click="indicadorAbierto = 'mttr'">
           <span class="tarjeta__titulo">MTTR promedio</span>
           <strong>{{ formatearHoras(datos.mttr_horas_promedio) }}</strong>
           <small>
             mín. {{ formatearHoras(datos.mttr_horas_minimo) }} · máx.
             {{ formatearHoras(datos.mttr_horas_maximo) }}
           </small>
-        </article>
-        <article class="tarjeta gio-panel">
+          <span class="tarjeta__ver">Ver detalle</span>
+        </button>
+        <button type="button" class="tarjeta gio-panel" @click="indicadorAbierto = 'liquidacion'">
           <span class="tarjeta__titulo">Tasa de liquidación</span>
           <strong>{{ tasaLiquidacion }}%</strong>
           <small>{{ datos.liquidados }} de {{ datos.total }} folios</small>
-        </article>
-        <article class="tarjeta gio-panel">
+          <span class="tarjeta__ver">Ver detalle</span>
+        </button>
+        <button type="button" class="tarjeta gio-panel" @click="indicadorAbierto = 'dilacion'">
           <span class="tarjeta__titulo">Dilación promedio (abiertos)</span>
           <strong>{{ datos.dilacion_promedio_dias ?? '—' }} d</strong>
-          <small>{{ datos.en_dilacion }} sobre el umbral de {{ datos.umbral_dilacion_dias }} d</small>
-        </article>
-        <article class="tarjeta tarjeta--alerta gio-panel">
+          <small>
+            mayor: {{ datos.dilacion_maxima_dias ?? '—' }} d · {{ datos.en_dilacion }} sobre el
+            umbral de {{ datos.umbral_dilacion_dias }} d
+          </small>
+          <span class="tarjeta__ver">Ver detalle</span>
+        </button>
+        <button
+          type="button"
+          class="tarjeta tarjeta--alerta gio-panel"
+          @click="indicadorAbierto = 'criticos'"
+        >
           <span class="tarjeta__titulo">Folios críticos</span>
           <strong class="tarjeta__rojo">{{ datos.criticos }}</strong>
           <small>≥ {{ datos.umbral_critico_dias }} días sin liquidar</small>
-        </article>
-        <article class="tarjeta gio-panel">
+          <span class="tarjeta__ver">Ver detalle</span>
+        </button>
+        <button type="button" class="tarjeta gio-panel" @click="indicadorAbierto = 'sin_tecnico'">
           <span class="tarjeta__titulo">Sin técnico asignado</span>
           <strong>{{ datos.sin_tecnico }}</strong>
           <small>requieren despacho</small>
-        </article>
-        <article class="tarjeta gio-panel">
-          <span class="tarjeta__titulo">Pendientes de exportar a SISA</span>
-          <strong>{{ datos.pendientes_exportar }}</strong>
-          <small>se envían con el robot de retorno</small>
-        </article>
+          <span class="tarjeta__ver">Ver detalle</span>
+        </button>
       </section>
 
       <section class="bloque gio-panel">
@@ -239,6 +254,13 @@ const exportarTecnico = () => {
         </table>
       </section>
     </template>
+
+    <DetalleIndicador
+      v-if="indicadorAbierto"
+      :indicador="indicadorAbierto"
+      :filtros="filtrosActivos()"
+      @close="indicadorAbierto = ''"
+    />
   </div>
 </template>
 
@@ -300,6 +322,25 @@ const exportarTecnico = () => {
   flex-direction: column;
   gap: 0.2rem;
   border-top: 3px solid var(--acento);
+  text-align: left;
+  color: var(--texto);
+  font: inherit;
+  cursor: pointer;
+  transition: background-color var(--rapido) var(--curva);
+}
+
+.tarjeta:hover,
+.tarjeta:focus-visible {
+  background-color: var(--panel-alto);
+}
+
+.tarjeta__ver {
+  margin-top: 0.35rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--acento-claro);
 }
 
 .tarjeta--alerta {

@@ -30,6 +30,33 @@ class UsuarioSerializer(serializers.ModelSerializer):
         validate_password(value)
         return value
 
+    def validate(self, datos):
+        """Un técnico activo necesita un área; una baja siempre queda en el área de bajas."""
+        actual = self.instance
+
+        def valor(campo, omision):
+            return datos.get(campo, getattr(actual, campo) if actual else omision)
+
+        if not valor('is_active', True):
+            datos['area_operativa'] = UsuarioGIO.Area.BAJA
+            return datos
+        con_area = valor('rol', UsuarioGIO.Rol.TECNICO) in UsuarioGIO.ROLES_CON_AREA
+        area = valor('area_operativa', '')
+        if area == UsuarioGIO.Area.BAJA:
+            reactivacion = bool(actual and not actual.is_active
+                                and 'area_operativa' not in datos)
+            if reactivacion and not con_area:
+                # Subgerencia y Gerencia no trabajan por zona: al volver quedan sin área.
+                area = datos['area_operativa'] = ''
+            else:
+                raise serializers.ValidationError({'area_operativa': (
+                    'Elija el área en la que trabajará el usuario al reactivarlo.'
+                    if reactivacion else 'El área Baja es solo para usuarios dados de baja.')})
+        if con_area and not area:
+            raise serializers.ValidationError({
+                'area_operativa': 'Los técnicos de planta externa e interna deben tener un área.'})
+        return datos
+
     def create(self, validated_data):
         password = validated_data.pop('password', None)
         if not password:

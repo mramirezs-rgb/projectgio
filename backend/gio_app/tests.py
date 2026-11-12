@@ -275,6 +275,52 @@ class MetricasTests(BaseGIOTestCase):
         self.assertEqual(respuesta.data['en_dilacion'], 1)
         self.assertIsNone(respuesta.data['mttr_horas_promedio'])
 
+    def test_metricas_dan_la_dilacion_mayor_y_ya_no_el_retorno_a_sisa(self):
+        self.autenticar(self.admin)
+        datos = self.client.get(reverse('incidente-metricas')).data
+        self.assertEqual(datos['dilacion_maxima_dias'], 7)
+        self.assertNotIn('pendientes_exportar', datos)
+
+    def test_cada_indicador_tiene_su_detalle(self):
+        self.autenticar(self.admin)
+        url = reverse('incidente-detalle-de-metricas')
+        for indicador in ('mttr', 'liquidacion', 'dilacion', 'criticos', 'sin_tecnico'):
+            respuesta = self.client.get(url, {'indicador': indicador})
+            self.assertEqual(respuesta.status_code, status.HTTP_200_OK, indicador)
+            self.assertTrue(respuesta.data['resumen'], indicador)
+            self.assertTrue(respuesta.data['desgloses'], indicador)
+        self.assertEqual(self.client.get(url, {'indicador': 'otro'}).status_code,
+                         status.HTTP_400_BAD_REQUEST)
+
+        dilacion = self.client.get(url, {'indicador': 'dilacion'}).data
+        self.assertEqual(dilacion['resumen'][0], {'etiqueta': 'Dilación mayor', 'valor': 7,
+                                                  'unidad': 'd'})
+        self.assertEqual([f['folio'] for f in dilacion['folios']['filas']],
+                         [self.propio.folio, self.ajeno.folio])
+        self.assertEqual(dilacion['folios']['filas'][0]['valor'], 7)
+
+    def test_el_detalle_respeta_filtros_y_rol(self):
+        url = reverse('incidente-detalle-de-metricas')
+        self.autenticar(self.admin)
+        datos = self.client.get(url, {'indicador': 'dilacion', 'area_operativa': 'VERACRUZ'}).data
+        self.assertEqual([f['folio'] for f in datos['folios']['filas']], [self.ajeno.folio])
+        self.autenticar(self.tecnico)
+        datos = self.client.get(url, {'indicador': 'liquidacion'}).data
+        self.assertEqual(datos['folios']['total'], 1)
+
+    def test_detalle_de_mttr_ordena_las_liquidaciones_mas_lentas(self):
+        for folio, horas in (('LENTO', 30), ('RAPIDO', 2)):
+            Incidente.objects.create(
+                folio=folio, area_operativa='PUEBLA', estatus=Incidente.Estatus.LIQUIDADO,
+                fecha_apertura=timezone.now() - timedelta(hours=horas),
+                fecha_cierre=timezone.now(), diagnostico_final='Listo')
+        self.autenticar(self.admin)
+        datos = self.client.get(reverse('incidente-detalle-de-metricas'),
+                                {'indicador': 'mttr'}).data
+        self.assertEqual([f['folio'] for f in datos['folios']['filas']], ['LENTO', 'RAPIDO'])
+        self.assertEqual(datos['resumen'][0]['valor'], 2)
+        self.assertAlmostEqual(datos['resumen'][1]['valor'], 16, places=1)
+
     def test_metricas_respetan_el_filtro_por_rol(self):
         self.autenticar(self.tecnico)
         self.assertEqual(self.client.get(reverse('incidente-metricas')).data['total'], 1)

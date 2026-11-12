@@ -132,6 +132,36 @@ export const avisarMensaje = (titulo, texto, alTocar) =>
     },
   })
 
+// Los mensajes de Gerencia son prioritarios: el aviso se distingue y dura más. Va abajo para no
+// tapar durante ese tiempo el botón de mensajes de la barra superior.
+export const avisarMensajeDeGerencia = (titulo, texto, alTocar) =>
+  GioSwal.fire({
+    toast: true,
+    position: 'bottom-end',
+    icon: 'warning',
+    titleText: titulo,
+    text: texto,
+    showConfirmButton: false,
+    showCloseButton: true,
+    timer: 20000,
+    timerProgressBar: true,
+    customClass: {
+      popup: 'gio-swal gio-aviso-gerencia',
+      title: 'gio-swal__title',
+      htmlContainer: 'gio-swal__texto',
+    },
+    didOpen: (aviso) => {
+      aviso.addEventListener('mouseenter', Swal.stopTimer)
+      aviso.addEventListener('mouseleave', Swal.resumeTimer)
+      aviso.style.cursor = 'pointer'
+      aviso.addEventListener('click', (evento) => {
+        if (evento.target.closest('.swal2-close')) return
+        Swal.close()
+        alTocar()
+      })
+    },
+  })
+
 function escapar(texto) {
   return String(texto)
     .replace(/&/g, '&amp;')

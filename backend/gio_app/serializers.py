@@ -118,6 +118,12 @@ class PermisosFolioMixin:
     def get_puede_cancelar_liquidacion(self, obj):
         return obj.puede_cancelar_liquidacion(self._usuario())
 
+    def get_en_apoyo(self, obj):
+        """Un técnico de planta interna que revisa un folio de otro: lo consulta y usa su chat."""
+        usuario = self._usuario()
+        return bool(usuario and usuario.is_authenticated and usuario.es_evaluador
+                    and obj.evaluador_id != usuario.id)
+
 
 class IncidenteSerializer(PermisosFolioMixin, serializers.ModelSerializer):
     tecnico_nombre = serializers.SerializerMethodField()
@@ -133,6 +139,7 @@ class IncidenteSerializer(PermisosFolioMixin, serializers.ModelSerializer):
     total_evidencias = serializers.IntegerField(source='evidencias.count', read_only=True)
     bloqueado = serializers.SerializerMethodField()
     puede_cancelar_liquidacion = serializers.SerializerMethodField()
+    en_apoyo = serializers.SerializerMethodField()
 
     class Meta:
         model = Incidente
@@ -140,7 +147,7 @@ class IncidenteSerializer(PermisosFolioMixin, serializers.ModelSerializer):
             'id', 'folio', 'incidente', 'referencia', 'empresa', 'tipo_servicio',
             'estatus', 'estatus_display', 'transiciones_validas', 'codigo_fallo', 'estado_enlace',
             'fecha_apertura', 'fecha_cierre', 'fecha_ingreso', 'dilacion_dias', 'semaforo',
-            'mttr_horas', 'horas_abierto', 'bloqueado', 'puede_cancelar_liquidacion',
+            'mttr_horas', 'horas_abierto', 'bloqueado', 'puede_cancelar_liquidacion', 'en_apoyo',
             'area_operativa', 'central', 'cope', 'ctro_trabajo', 'oqu',
             'tecnico', 'tecnico_nombre', 'evaluador', 'evaluador_nombre', 'telefono_tecnico',
             'descripcion', 'diagnostico_final', 'obs_usuario', 'observaciones_sisa',
@@ -272,7 +279,7 @@ def _solo_lectura_excepto(editables):
     declarados = {
         'tecnico_nombre', 'evaluador_nombre', 'estatus_display', 'mttr_horas', 'horas_abierto',
         'dilacion_dias', 'semaforo', 'transiciones_validas', 'evidencias', 'total_evidencias',
-        'bloqueado', 'puede_cancelar_liquidacion',
+        'bloqueado', 'puede_cancelar_liquidacion', 'en_apoyo',
     }
     return [
         campo for campo in IncidenteSerializer.Meta.fields

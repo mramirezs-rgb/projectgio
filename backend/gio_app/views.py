@@ -4,7 +4,7 @@ from datetime import date
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.db import transaction
-from django.db.models import Avg, Count, Q
+from django.db.models import Avg, Count, Max, Q
 from django.http import HttpResponse
 from django.utils import timezone
 from rest_framework import status, viewsets
@@ -21,9 +21,10 @@ from usuarios.permissions import (
 )
 
 from .chat import mensajes_pendientes
-from .desempeno import desempeno_de_campo
+from .desempeno import AREAS_DE_DESEMPENO, desempeno_de_campo
 from .exportacion import MAX_FILAS, generar_csv, generar_xlsx, nombre_de_archivo
 from .filters import IncidenteFilter
+from .indicadores import INDICADORES, detalle_de_indicador
 from .models import (
     BitacoraIncidente, EvidenciaIncidente, Incidente, LecturaChat, TurnoEvaluador,
 )
@@ -98,7 +99,10 @@ class IncidenteViewSet(viewsets.ModelViewSet):
     ordering_fields = ['fecha_apertura', 'fecha_cierre', 'dilacion_dias', 'folio', 'estatus', 'id']
     ordering = ['-fecha_apertura']
     # Acciones que filtran, ordenan o promedian con la dilación guardada en la base de datos.
-    ACCIONES_CON_DILACION = {'list', 'metricas', 'desempeno', 'exportar'}
+    ACCIONES_CON_DILACION = {'list', 'metricas', 'detalle_de_metricas', 'desempeno', 'exportar'}
+    # Un técnico de planta interna puede revisar cualquier folio y su chat para apoyar a quien
+    # está de descanso; modificarlo sigue reservado a quien lo tiene asignado.
+    ACCIONES_DE_APOYO = {'retrieve', 'mensajes', 'evidencias', 'bitacora'}
 
     def initial(self, request, *args, **kwargs):
         super().initial(request, *args, **kwargs)
@@ -106,7 +110,12 @@ class IncidenteViewSet(viewsets.ModelViewSet):
             Incidente.refrescar_dilaciones()
 
     def get_queryset(self):
-        return queryset_por_rol(self.request.user)
+        usuario = self.request.user
+        if (usuario.is_authenticated and usuario.es_evaluador
+                and self.action in self.ACCIONES_DE_APOYO):
+            return Incidente.objects.select_related('tecnico', 'evaluador').prefetch_related(
+                'evidencias')
+        return queryset_por_rol(usuario)
 
     def get_serializer_class(self):
         if self.action == 'list':
@@ -289,7 +298,7 @@ class IncidenteViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['get'], url_path='mensajes-pendientes')
     def pendientes_de_chat(self, request):
-        return Response(mensajes_pendientes(request.user, self.get_queryset()))
+        return Response(mensajes_pendientes(request.user, queryset_por_rol(request.user)))
 
     @action(detail=False, methods=['post'], url_path='asignar-masivo',
             permission_classes=[PuedeAsignar])
@@ -356,8 +365,6 @@ class IncidenteViewSet(viewsets.ModelViewSet):
                               & ~Q(estatus=Incidente.Estatus.LIQUIDADO)),
             criticos=Count('id', filter=Q(dilacion_dias__gte=critico)
                            & ~Q(estatus=Incidente.Estatus.LIQUIDADO)),
-            pendientes_exportar=Count('id', filter=Q(estatus=Incidente.Estatus.LIQUIDADO,
-                                                     exportado_sisa=False)),
         )
 
         periodos = (queryset.filter(estatus=Incidente.Estatus.LIQUIDADO,
@@ -368,10 +375,12 @@ class IncidenteViewSet(viewsets.ModelViewSet):
         agregados['mttr_horas_promedio'] = round(sum(mttr) / len(mttr), 2) if mttr else None
         agregados['mttr_horas_maximo'] = round(max(mttr), 2) if mttr else None
         agregados['mttr_horas_minimo'] = round(min(mttr), 2) if mttr else None
-        agregados['dilacion_promedio_dias'] = queryset.exclude(
-            estatus=Incidente.Estatus.LIQUIDADO).aggregate(v=Avg('dilacion_dias'))['v']
-        if agregados['dilacion_promedio_dias'] is not None:
-            agregados['dilacion_promedio_dias'] = round(agregados['dilacion_promedio_dias'], 2)
+        dilacion = queryset.exclude(estatus=Incidente.Estatus.LIQUIDADO).aggregate(
+            promedio=Avg('dilacion_dias'), mayor=Max('dilacion_dias'))
+        agregados['dilacion_promedio_dias'] = (
+            None if dilacion['promedio'] is None else round(dilacion['promedio'], 2))
+        # El folio abierto con más días: es el número que muestra el indicador del tablero.
+        agregados['dilacion_maxima_dias'] = dilacion['mayor']
 
         agregados['por_area'] = list(
             queryset.exclude(area_operativa='')
@@ -391,6 +400,15 @@ class IncidenteViewSet(viewsets.ModelViewSet):
         agregados['umbral_critico_dias'] = critico
         agregados['generado_en'] = timezone.now()
         return Response(agregados)
+
+    @action(detail=False, methods=['get'], url_path='metricas/detalle')
+    def detalle_de_metricas(self, request):
+        """Lo que hay detrás de un indicador, con los mismos filtros que las métricas."""
+        indicador = request.query_params.get('indicador') or ''
+        if indicador not in INDICADORES:
+            raise ValidationError({'indicador': f'Use uno de: {", ".join(INDICADORES)}.'})
+        return Response(detalle_de_indicador(
+            indicador, self.filter_queryset(self.get_queryset())))
 
     @action(detail=False, methods=['get'], url_path='exportar', permission_classes=[PuedeExportar])
     def exportar(self, request):
@@ -423,7 +441,10 @@ class IncidenteViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['get'], url_path='desempeno', permission_classes=[PuedeAsignar])
     def desempeno(self, request):
-        return Response(desempeno_de_campo(area=area_de_consulta(request)))
+        area = area_de_consulta(request)
+        if area and area not in AREAS_DE_DESEMPENO:
+            raise ValidationError({'area': f'Use una de: {", ".join(AREAS_DE_DESEMPENO)}.'})
+        return Response(desempeno_de_campo(area=area))
 
 
 class TecnicoListView(APIView):
@@ -485,7 +506,7 @@ class CatalogosView(APIView):
             'codigos_fallo': [{'id': v, 'nombre': n} for v, n in Incidente.CodigoFallo.choices],
             'estado_enlace': [{'id': v, 'nombre': n} for v, n in Incidente.EstadoEnlace.choices],
             'roles': [{'id': v, 'nombre': n} for v, n in UsuarioGIO.Rol.choices],
-            'areas': [{'id': v, 'nombre': n} for v, n in UsuarioGIO.Area.choices],
+            'areas': [{'id': v, 'nombre': n} for v, n in UsuarioGIO.areas_operativas()],
             'transiciones': {k: sorted(v) for k, v in Incidente.TRANSICIONES.items()},
             'limites': {
                 'evidencia_max_bytes': settings.EVIDENCIA_MAX_BYTES,

@@ -2,8 +2,7 @@
 
 Plataforma web desacoplada (*headless*) para el enlace operativo entre la Planta Interna (OQU) y la
 Planta Externa del CASE Puebla: ingesta automatizada de averías SISA, tablero Kanban con semáforos
-de dilación, módulo móvil de campo con compresión de evidencia en el cliente, cálculo de MTTR y
-robot de retorno hacia los sistemas legados.
+de dilación, módulo móvil de campo con compresión de evidencia en el cliente y cálculo de MTTR.
 
 - **Backend:** Python / Django 6 + Django REST Framework, autenticación JWT, PostgreSQL 15.
 - **Frontend:** Vue 3 (Composition API) + Vite + Tailwind CSS + SweetAlert2, instalable como PWA.
@@ -20,7 +19,6 @@ frontend/                Cliente Vue 3 (escritorio PI + móvil PE)
 private_data/            Carpetas aisladas de intercambio SISA (no se versionan)
   sisa_imports/          Reportes de averías a ingerir
   sisa_imports/procesados/
-  sisa_exports/          Archivos RETORNO_SISA_*.csv generados
 ```
 
 ## Puesta en marcha
@@ -67,11 +65,23 @@ El acceso se realiza con el **expediente** corporativo, no con correo electróni
 | --- | --- | --- |
 | `ADMIN` | Todos | CRUD completo de folios y **único rol con CRUD de usuarios** |
 | `PI_SUB` | Todos | Alta de folios, reasignación individual y masiva; sin consola de usuarios |
-| `PI_EVALUADOR` | Solo donde es `evaluador` | Diagnóstico, datos de red y validación del trabajo de campo |
+| `PI_EVALUADOR` | En el tablero, solo donde es `evaluador`; puede abrir cualquier otro folio para revisarlo y usar su chat | Diagnóstico, datos de red y validación del trabajo de campo de sus folios |
 | `TECNICO` | Solo donde es `tecnico` | Liquidación y carga de evidencias de su propio folio |
 
 El filtrado se aplica en el servidor (`get_queryset`), por lo que un técnico recibe `404` al pedir
 un folio ajeno, y los campos editables se restringen por serializador según el rol.
+
+### Áreas y bajas
+
+Los técnicos de planta externa y de planta interna trabajan por zona, así que **deben tener un
+área operativa**: GIO no deja guardarlos sin ella y la consola de **Usuarios** avisa de los que aún
+no la tienen. Las áreas son Puebla, Pachuca, Veracruz, Poza Rica, Jalapa, Tlaxcala, Córdoba,
+Coatzacoalcos y Quintana Roo. Subgerencia y Gerencia pueden quedar sin área.
+
+Al **dar de baja** a un usuario, además de quitarle el acceso, GIO lo pasa al área **Baja**: deja de
+aparecer en su zona, en las listas de técnicos, en el reparto y en el desempeño, y en **Usuarios**
+queda al final de la lista. Sus folios históricos se conservan. Para reactivar a un técnico hay que
+elegir el área en la que trabajará.
 
 ## Contraseña y correo de recuperación
 
@@ -121,7 +131,7 @@ Cada cambio de estatus, asignación, liquidación y carga de evidencia queda en
 
 ## Reporte de folios
 
-Subgerencia y Gerencia descargan desde el tablero el botón **Exportar**, en Excel (`.xlsx`) o CSV
+Subgerencia y Gerencia descargan desde el tablero con el botón **Exportar**, en Excel (`.xlsx`) o CSV
 (`GET /api/incidentes/exportar/?formato=xlsx|csv`). El reporte incluye **todos** los folios que
 coinciden con los filtros, la búsqueda y el orden activos, no solo la página visible, hasta
 50 000 folios por descarga. El Excel trae encabezado fijo, autofiltro, fechas como fecha y MTTR como
@@ -132,7 +142,7 @@ número. Los textos que una hoja de cálculo ejecutaría como fórmula (empiezan
 
 Los reportes clasificados no se cargan por la interfaz web: se depositan en carpetas del servidor y
 se procesan en segundo plano. La carpeta `private_data/` puede compartirse en la red para que la
-computadora de SISA deje ahí el reporte y recoja el retorno; los pasos están en
+computadora de SISA deje ahí el reporte; los pasos están en
 [`docs/carpeta-compartida-sisa.md`](docs/carpeta-compartida-sisa.md).
 
 ```bash
@@ -143,11 +153,12 @@ python manage.py ingesta_sisa
 # Alta revisada de técnicos que aparecen en el reporte pero no existen en GIO
 python manage.py importar_tecnicos
 python manage.py importar_tecnicos --confirmar
-
-# Retorno: folios LIQUIDADO sin exportar -> private_data/sisa_exports/RETORNO_SISA_*.csv
-python manage.py exportar_sisa --dry-run
-python manage.py exportar_sisa
 ```
+
+El retorno hacia SISA (`exportar_sisa` y los archivos `RETORNO_SISA_*.csv`) está **retirado por
+ahora** y se retomará más adelante. Los campos del folio que llevaban ese control
+(`exportado_sisa`, `estado_sincronizacion`) se conservan en la base de datos para entonces, pero ya
+no se muestran ni se usan.
 
 La ingesta nunca borra registros ni crea usuarios por su cuenta: inserta folios nuevos, refresca
 solo los campos de origen SISA de los ya existentes (sin tocar estatus ni asignaciones), reporta los
@@ -161,8 +172,9 @@ asignado). `importar_tecnicos` da de alta a los técnicos de planta externa con 
 de `OQU` con rol de planta interna (expediente `OQU-…`). Omite las cuentas de operadora que SISA
 pone en `OQU` (por ejemplo, `CASPUE OPERADORA INTERNET`), porque no son personas; esos folios
 quedan sin técnico de planta interna para el reparto por turnos. Con `--excluir TEXTO` se omiten
-otros nombres. `--area` se aplica a todas las altas; sin él, el usuario queda sin zona y en el
-reparto puede recibir folios de cualquier área. El área operativa es la
+otros nombres. Cada alta toma como área la más frecuente de sus folios en el reporte; `--area` fija
+la misma para todas. Si el reporte no trae un área reconocida, el comando lo avisa y hay que
+asignarla después en **Usuarios**. El área operativa es la
 columna `ÁREA` (p. ej. JALAPA); XALAPA es una COPE/central dentro de ella. En un folio que ya está
 liquidado en GIO, la ingesta no reemplaza la clave ni la descripción de liquidación, los códigos
 COD4/CARLS/COD5 ni el estado del enlace; y si el reporte no trae la columna `ESTATUS I/O`, no borra
@@ -172,20 +184,18 @@ Como la carpeta puede ser de red, la ingesta solo lee reportes que llevan
 `GIO_SISA_ESPERA_SEGUNDOS` (60 por omisión) sin modificarse, ignora los `~$…` que Excel crea
 mientras un libro está abierto, lee también los `.xls` que en realidad son tablas HTML y, si no
 puede mover un archivo a `procesados/`, lo vuelve a leer en la siguiente corrida sin duplicar
-folios. La exportación marca `exportado_sisa = True` en la misma transacción en que escribe el
-retorno: lo escribe con otro nombre y lo renombra completo, nunca reemplaza un retorno anterior y,
-si falla, los folios siguen pendientes. Las rutas relativas de `GIO_PRIVATE_DATA_DIR` se toman desde
-`backend/`; `GIO_SISA_IMPORTS_DIR` y `GIO_SISA_EXPORTS_DIR` permiten apuntar la entrada y el retorno
+folios. Las rutas relativas de `GIO_PRIVATE_DATA_DIR` se toman desde
+`backend/`; `GIO_SISA_IMPORTS_DIR` permite apuntar la entrada
 a otra carpeta, incluso de otra computadora (`\\PC-SISA\GIO_Reportes`). Si la otra computadora
 deja el reporte en su propia carpeta compartida, `GIO_SISA_ORIGEN` apunta a ese archivo o carpeta:
 la ingesta copia a `sisa_imports` solo lo que cambió desde la última vez y no toca el original.
 
 Programación sugerida en el servidor: `backend\scripts\sincronizar_sisa.bat` cada 15 minutos en el
-Programador de tareas de Windows (ejecuta la ingesta y el retorno y deja el resultado en
+Programador de tareas de Windows (ejecuta la ingesta y deja el resultado en
 `backend\logs\sisa.log`). Con cron:
 
 ```
-*/15 * * * *  python manage.py ingesta_sisa && python manage.py exportar_sisa
+*/15 * * * *  python manage.py ingesta_sisa
 ```
 
 ### Empezar de cero
@@ -197,7 +207,7 @@ python manage.py borrar_folios
 ```
 
 El comando muestra cuántos folios, evidencias, mensajes y registros de bitácora se borrarán, avisa si
-hay folios liquidados que aún no se enviaban a SISA o archivos `RETORNO_SISA` en `sisa_exports/`, y
+quedaron archivos `RETORNO_SISA` en `sisa_exports/`, y
 pide escribir `BORRAR` para continuar. Antes de borrar guarda un respaldo en
 `backend/respaldos/folios_<fecha>/` (`folios.json` y las fotos), que no se sube al repositorio y se
 recupera con `python manage.py loaddata`. No toca usuarios ni turnos. Un folio que llegue por la
@@ -215,8 +225,8 @@ la captura.
 
 Cada folio tiene su propio chat para que planta externa y planta interna se coordinen sin salir de
 GIO; la conversación queda guardada en el folio junto con sus datos, evidencias y bitácora. Puede
-escribir quien puede ver el folio: el técnico de planta externa asignado, el técnico de planta
-interna (`evaluador`) y Subgerencia o Gerencia. Si el folio se reasigna, el nuevo técnico ve el
+escribir quien puede ver el folio: el técnico de planta externa asignado, cualquier técnico de
+planta interna (`evaluador`) y Subgerencia o Gerencia. Si el folio se reasigna, el nuevo técnico ve el
 historial completo. Se admite conversar aunque el folio esté liquidado, porque el chat no modifica
 el folio. Los mensajes no se editan ni se borran y Gerencia los consulta en el admin.
 
@@ -227,8 +237,22 @@ planta interna también puede enviarlas (por ejemplo, una captura de gestión).
 
 En la barra superior, el ícono de mensajes muestra cuántos hay sin leer y lleva al chat de cada
 folio; las tarjetas del tablero y de la vista de campo también lo indican. El técnico y el
-evaluador reciben avisos de todos sus folios; Subgerencia y Gerencia, solo de los chats en que ya
-escribieron. Un mensaje cuenta como leído cuando se abre el chat de ese folio.
+evaluador reciben avisos de todos sus folios y de los chats en que ya escribieron; Subgerencia y
+Gerencia, solo de los chats en que ya escribieron. Un mensaje cuenta como leído cuando se abre el
+chat de ese folio.
+
+**Los mensajes de Gerencia son prioritarios.** Avisan a todos los que atienden el folio y también
+a Subgerencia, aunque no haya escrito en ese chat. En la bandeja van primero y marcados en rojo, su
+alerta es distinta y dura más, y dentro del chat se distinguen del resto.
+
+**Apoyo cuando el técnico de planta interna descansa.** Cualquier técnico de planta interna puede
+abrir el chat de un folio que no es suyo, leerlo y responder; el folio se le muestra de solo
+lectura y, si hace falta modificarlo, Subgerencia se lo reasigna. Quien **está de turno** recibe
+además los avisos de los folios abiertos de su zona cuyo técnico de planta interna no tiene turno
+ese día (o que no tienen ninguno), así un mensaje no se queda sin leer hasta que regrese. Esto
+depende de la programación de **Turnos**: sin turnos programados nadie recibe avisos de folios
+ajenos. Estos avisos y los de Gerencia para Subgerencia solo cuentan mensajes de los últimos tres
+días, para no anunciar conversaciones antiguas.
 
 Cuando llega un mensaje aparece una alerta en la esquina con el folio, quién escribe y el texto; al
 tocarla se abre ese chat. En teléfonos Android además vibra, y el título de la pestaña muestra los
@@ -257,10 +281,22 @@ un diálogo abierto: espera a que se cierre. Los avisos se revisan cada 15 s y e
 | `GET` | `/api/incidentes/mensajes-pendientes/` | Mensajes sin leer por folio para quien consulta |
 | `POST` | `/api/incidentes/asignar-masivo/` | Reasignación por lote (`PI_SUB`, `ADMIN`) |
 | `GET` | `/api/incidentes/metricas/` | MTTR, dilación y carga por área y técnico |
+| `GET` | `/api/incidentes/metricas/detalle/?indicador=` | Detalle de un indicador (`mttr`, `liquidacion`, `dilacion`, `criticos`, `sin_tecnico`): resumen, desgloses por área y folios |
 | `GET` | `/api/catalogos/` | Estatus, códigos de fallo, roles, áreas y límites |
 
 Las métricas se calculan sobre el universo completo que el rol puede ver y respetan los filtros
 activos, de modo que los indicadores no dependen de la página en pantalla.
+
+En **Métricas**, cada indicador (MTTR, tasa de liquidación, dilación, folios críticos y sin técnico)
+se abre al presionarlo y muestra su detalle con los mismos filtros: un resumen con varios datos, el
+desglose por área y los folios que lo explican (hasta 50), que llevan al folio en el tablero.
+
+En el tablero, el indicador **Dilación mayor** muestra los días del folio abierto con más dilación,
+no la cantidad de folios; esa cantidad y los críticos aparecen debajo, y al presionarlo se abre el
+mismo detalle de dilación.
+
+El **Desempeño de campo** se consulta por ocho áreas: Puebla, Coatzacoalcos, Poza Rica, Tlaxcala,
+Pachuca, Quintana Roo, Córdoba y Veracruz.
 
 ## Pruebas
 

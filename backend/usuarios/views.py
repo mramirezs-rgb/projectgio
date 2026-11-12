@@ -141,8 +141,9 @@ class UsuarioViewSet(viewsets.ModelViewSet):
     permission_classes = [EsAdmin]
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
     search_fields = ['expediente', 'username', 'first_name', 'last_name', 'email']
-    ordering_fields = ['expediente', 'rol', 'date_joined', 'last_login']
-    ordering = ['expediente']
+    ordering_fields = ['expediente', 'rol', 'date_joined', 'last_login', 'is_active']
+    # Las bajas van al final para no mezclarse con los usuarios en operación.
+    ordering = ['-is_active', 'expediente']
 
     def get_queryset(self):
         return UsuarioGIO.objects.annotate(
@@ -157,5 +158,4 @@ class UsuarioViewSet(viewsets.ModelViewSet):
         if instance.pk == self.request.user.pk:
             from rest_framework.exceptions import ValidationError
             raise ValidationError({'detail': 'No puede eliminar su propia cuenta.'})
-        instance.is_active = False
-        instance.save(update_fields=['is_active'])
+        instance.dar_de_baja()

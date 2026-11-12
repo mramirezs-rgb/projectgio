@@ -101,7 +101,8 @@ class GestionUsuariosTests(APITestCase):
     def test_password_debil_se_rechaza(self):
         self.client.force_authenticate(user=self.admin)
         respuesta = self.client.post(reverse('usuario-list'), {
-            'expediente': 'TEC-0002', 'rol': UsuarioGIO.Rol.TECNICO, 'password': '123456',
+            'expediente': 'TEC-0002', 'rol': UsuarioGIO.Rol.TECNICO, 'area_operativa': 'PUEBLA',
+            'password': '123456',
         }, format='json')
         self.assertEqual(respuesta.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn('password', respuesta.data)
@@ -112,6 +113,61 @@ class GestionUsuariosTests(APITestCase):
         self.assertEqual(respuesta.status_code, status.HTTP_204_NO_CONTENT)
         self.sub.refresh_from_db()
         self.assertFalse(self.sub.is_active)
+
+    def test_la_baja_pasa_al_usuario_al_area_de_bajas(self):
+        tecnico = UsuarioGIO.objects.create_user(
+            expediente='TEC-0100', password='Gio.2026.Seg', area_operativa='PUEBLA')
+        self.client.force_authenticate(user=self.admin)
+        url = reverse('usuario-detail', args=[tecnico.pk])
+        self.client.delete(url)
+        tecnico.refresh_from_db()
+        self.assertEqual(tecnico.area_operativa, UsuarioGIO.Area.BAJA)
+        self.assertEqual(self.client.get(reverse('usuario-list')).data['results'][-1]['expediente'],
+                         'TEC-0100')
+
+        # Un técnico vuelve con un área de trabajo; Subgerencia no la necesita.
+        respuesta = self.client.patch(url, {'is_active': True}, format='json')
+        self.assertEqual(respuesta.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('area_operativa', respuesta.data)
+        respuesta = self.client.patch(url, {'is_active': True, 'area_operativa': 'TLAXCALA'},
+                                      format='json')
+        self.assertEqual(respuesta.status_code, status.HTTP_200_OK)
+        self.client.delete(reverse('usuario-detail', args=[self.sub.pk]))
+        respuesta = self.client.patch(reverse('usuario-detail', args=[self.sub.pk]),
+                                      {'is_active': True}, format='json')
+        self.assertEqual(respuesta.data['area_operativa'], '')
+
+    def test_la_baja_desde_la_edicion_tambien_cambia_el_area(self):
+        tecnico = UsuarioGIO.objects.create_user(
+            expediente='TEC-0101', password='Gio.2026.Seg', area_operativa='PUEBLA')
+        self.client.force_authenticate(user=self.admin)
+        self.client.patch(reverse('usuario-detail', args=[tecnico.pk]), {'is_active': False},
+                          format='json')
+        tecnico.refresh_from_db()
+        self.assertEqual(tecnico.area_operativa, UsuarioGIO.Area.BAJA)
+
+    def test_los_tecnicos_necesitan_un_area(self):
+        self.client.force_authenticate(user=self.admin)
+        for rol in (UsuarioGIO.Rol.TECNICO, UsuarioGIO.Rol.PI_EVALUADOR):
+            respuesta = self.client.post(reverse('usuario-list'), {
+                'expediente': f'SIN-{rol[:3]}', 'rol': rol, 'password': 'Campo.2026.Seg',
+            }, format='json')
+            self.assertEqual(respuesta.status_code, status.HTTP_400_BAD_REQUEST, rol)
+            self.assertIn('area_operativa', respuesta.data)
+        respuesta = self.client.post(reverse('usuario-list'), {
+            'expediente': 'TEC-0102', 'rol': UsuarioGIO.Rol.TECNICO, 'area_operativa': 'BAJA',
+            'password': 'Campo.2026.Seg',
+        }, format='json')
+        self.assertEqual(respuesta.status_code, status.HTTP_400_BAD_REQUEST)
+        respuesta = self.client.post(reverse('usuario-list'), {
+            'expediente': 'SUB-0102', 'rol': UsuarioGIO.Rol.PI_SUB, 'password': 'Campo.2026.Seg',
+        }, format='json')
+        self.assertEqual(respuesta.status_code, status.HTTP_201_CREATED)
+        respuesta = self.client.post(reverse('usuario-list'), {
+            'expediente': 'TEC-0103', 'rol': UsuarioGIO.Rol.TECNICO,
+            'area_operativa': 'QUINTANA ROO', 'password': 'Campo.2026.Seg',
+        }, format='json')
+        self.assertEqual(respuesta.status_code, status.HTTP_201_CREATED)
 
     def test_cambio_de_password_propio(self):
         self.client.force_authenticate(user=self.sub)

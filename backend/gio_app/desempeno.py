@@ -7,6 +7,13 @@ from .models import Incidente
 
 UsuarioGIO = get_user_model()
 
+# Áreas por las que se consulta el desempeño de campo, en el orden en que se muestran.
+AREAS_DE_DESEMPENO = (
+    UsuarioGIO.Area.PUEBLA, UsuarioGIO.Area.COATZACOALCOS, UsuarioGIO.Area.POZA_RICA,
+    UsuarioGIO.Area.TLAXCALA, UsuarioGIO.Area.PACHUCA, UsuarioGIO.Area.QUINTANA_ROO,
+    UsuarioGIO.Area.CORDOBA, UsuarioGIO.Area.VERACRUZ,
+)
+
 
 def _fila_vacia(usuario):
     return {
@@ -83,6 +90,7 @@ def desempeno_de_campo(area=''):
 
     return {
         'generado_en': ahora,
+        'areas': [{'id': area.value, 'nombre': area.label} for area in AREAS_DE_DESEMPENO],
         'tecnicos_planta_externa': [f for f in filas.values()
                                     if f['rol'] == UsuarioGIO.Rol.TECNICO],
         'tecnicos_planta_interna': [f for f in filas.values()

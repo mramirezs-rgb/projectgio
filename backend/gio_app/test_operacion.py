@@ -308,6 +308,26 @@ class DesempenoDeCampoTests(BaseGIOTestCase):
         self.assertEqual(interna['OQU-8821']['abiertos'], 1)
         self.assertEqual(interna['OQU-9000']['abiertos'], 1)
 
+    def test_el_desempeno_se_consulta_solo_por_sus_ocho_areas(self):
+        self.autenticar(self.sub)
+        url = reverse('incidente-desempeno')
+        self.assertEqual([a['id'] for a in self.client.get(url).data['areas']], [
+            'PUEBLA', 'COATZACOALCOS', 'POZA RICA', 'TLAXCALA', 'PACHUCA', 'QUINTANA ROO',
+            'CORDOBA', 'VERACRUZ'])
+        self.assertEqual(self.client.get(url, {'area': 'quintana roo'}).status_code,
+                         status.HTTP_200_OK)
+        self.assertEqual(self.client.get(url, {'area': 'JALAPA'}).status_code,
+                         status.HTTP_400_BAD_REQUEST)
+
+    def test_un_usuario_dado_de_baja_sale_del_desempeno(self):
+        self.otro_tecnico.dar_de_baja()
+        self.autenticar(self.sub)
+        expedientes = [f['expediente'] for f in self.client.get(
+            reverse('incidente-desempeno')).data['tecnicos_planta_externa']]
+        self.assertEqual(expedientes, ['TEC-4410'])
+        self.otro_tecnico.refresh_from_db()
+        self.assertEqual(self.otro_tecnico.area_operativa, 'BAJA')
+
     def test_planta_externa_no_ve_el_desempeno(self):
         self.autenticar(self.tecnico)
         self.assertEqual(self.client.get(reverse('incidente-desempeno')).status_code,
@@ -379,6 +399,23 @@ class ImportacionTelefonoTecnicoTests(BaseGIOTestCase):
         self.assertEqual(nuevo.rol, UsuarioGIO.Rol.TECNICO)
         self.tecnico.refresh_from_db()
         self.assertEqual(self.tecnico.telefono, '2221112233')
+
+    def test_importar_tecnicos_asigna_el_area_mas_frecuente_del_reporte(self):
+        salida = correr('importar_tecnicos',
+                        '1,UNINET,PUEBLA,LOS PINOS,JUAN CARLOS HERNANDEZ MUNOZ,\n'
+                        '2,UNINET,TLAXCALA,CENTRO,JUAN CARLOS HERNANDEZ MUNOZ,\n'
+                        '3,UNINET,TLAXCALA,CENTRO,JUAN CARLOS HERNANDEZ MUNOZ,\n'
+                        '4,UNINET,ZONA RARA,CENTRO,PEDRO PARAMO RULFO,\n',
+                        '--confirmar')
+        self.assertEqual(UsuarioGIO.objects.get(first_name='JUAN CARLOS').area_operativa,
+                         'TLAXCALA')
+        self.assertEqual(UsuarioGIO.objects.get(first_name='PEDRO').area_operativa, '')
+        self.assertIn('1 técnico(s) quedarían sin área', salida)
+
+    def test_importar_tecnicos_rechaza_un_area_que_no_existe(self):
+        with self.assertRaisesMessage(CommandError, 'no existe'):
+            correr('importar_tecnicos', '1,UNINET,PUEBLA,LOS PINOS,ANA LOPEZ DIAZ,\n',
+                   '--area', 'MARTE')
 
     def test_importar_tecnicos_sin_confirmar_no_cambia_nada(self):
         salida = correr('importar_tecnicos', '2,UNINET,PUEBLA,LOS PINOS,LUIS SERRANO,2221112233\n')
@@ -570,13 +607,101 @@ class ChatFolioTests(BaseGIOTestCase):
                          [self.tecnico.pk, self.evaluador.pk])
         self.assertEqual(respuesta.data[1]['autor_nombre'], self.evaluador.nombre_completo)
 
-    def test_quien_no_ve_el_folio_no_ve_ni_escribe_en_su_chat(self):
+    def test_planta_externa_no_ve_ni_escribe_en_el_chat_de_un_folio_ajeno(self):
         self.escribir(self.tecnico, 'Mensaje interno del folio')
-        for usuario in (self.otro_tecnico, self.otro_evaluador):
-            self.autenticar(usuario)
-            self.assertEqual(self.client.get(self.url).status_code, status.HTTP_404_NOT_FOUND)
-            self.assertEqual(self.escribir(usuario, 'Hola').status_code,
-                             status.HTTP_404_NOT_FOUND)
+        self.autenticar(self.otro_tecnico)
+        self.assertEqual(self.client.get(self.url).status_code, status.HTTP_404_NOT_FOUND)
+        self.assertEqual(self.escribir(self.otro_tecnico, 'Hola').status_code,
+                         status.HTTP_404_NOT_FOUND)
+
+    def test_otro_tecnico_de_planta_interna_revisa_y_responde_el_chat(self):
+        self.escribir(self.tecnico, 'No tengo señal en el puerto')
+        self.autenticar(self.otro_evaluador)
+        self.assertEqual([m['texto'] for m in self.client.get(self.url).data],
+                         ['No tengo señal en el puerto'])
+        self.assertEqual(self.escribir(self.otro_evaluador, 'Lo reviso yo').status_code,
+                         status.HTTP_201_CREATED)
+
+        detalle = self.client.get(reverse('incidente-detail', args=[self.propio.pk]))
+        self.assertEqual(detalle.status_code, status.HTTP_200_OK)
+        self.assertTrue(detalle.data['en_apoyo'])
+        # Revisa y conversa, pero el folio lo modifica quien lo tiene asignado.
+        self.assertEqual(
+            self.client.patch(reverse('incidente-detail', args=[self.propio.pk]),
+                              {'descripcion': 'Cambio ajeno'}, format='json').status_code,
+            status.HTTP_404_NOT_FOUND)
+        lista = self.client.get(reverse('incidente-list')).data['results']
+        self.assertEqual([f['folio'] for f in lista], [self.ajeno.folio])
+
+        # Después de escribir sigue la conversación aunque no esté de turno.
+        self.escribir(self.tecnico, 'Gracias')
+        self.assertEqual(self.pendientes(self.otro_evaluador)['por_folio'],
+                         {str(self.propio.pk): 1})
+
+    def turno_hoy(self, evaluador):
+        TurnoEvaluador.objects.create(fecha=timezone.localdate(), evaluador=evaluador,
+                                      hora_inicio='00:00', hora_fin='23:59')
+
+    def test_quien_esta_de_turno_recibe_los_avisos_del_que_descansa(self):
+        self.escribir(self.tecnico, 'Urge liberar el puerto')
+        # Sin turnos programados nadie cubre folios ajenos.
+        self.assertEqual(self.pendientes(self.otro_evaluador)['total'], 0)
+
+        self.turno_hoy(self.otro_evaluador)
+        avisos = self.pendientes(self.otro_evaluador)
+        self.assertEqual(avisos['por_folio'], {str(self.propio.pk): 1})
+        self.assertEqual(self.pendientes(self.evaluador)['total'], 1)
+
+        # Si el asignado también está de turno, el folio es solo suyo.
+        self.turno_hoy(self.evaluador)
+        self.assertEqual(self.pendientes(self.otro_evaluador)['total'], 0)
+
+    def test_el_apoyo_respeta_la_zona_y_no_revive_conversaciones_viejas(self):
+        self.turno_hoy(self.otro_evaluador)
+        self.otro_evaluador.area_operativa = 'VERACRUZ'
+        self.otro_evaluador.save()
+        self.escribir(self.tecnico, 'Folio de Puebla')
+        self.assertEqual(self.pendientes(self.otro_evaluador)['total'], 0)
+
+        self.otro_evaluador.area_operativa = 'PUEBLA'
+        self.otro_evaluador.save()
+        self.assertEqual(self.pendientes(self.otro_evaluador)['total'], 1)
+        MensajeFolio.objects.update(creado_en=timezone.now() - timedelta(days=10))
+        self.assertEqual(self.pendientes(self.otro_evaluador)['total'], 0)
+        self.assertEqual(self.pendientes(self.evaluador)['total'], 1)
+
+    def test_los_mensajes_de_gerencia_avisan_a_todos_y_van_primero(self):
+        url_ajeno = reverse('incidente-mensajes', args=[self.ajeno.pk])
+        self.escribir(self.admin, 'Atiendan este folio hoy mismo')
+        self.escribir(self.otro_tecnico, 'Voy saliendo', url_ajeno)
+
+        for usuario in (self.tecnico, self.evaluador, self.sub):
+            avisos = self.pendientes(usuario)
+            self.assertEqual(avisos['de_gerencia'], 1, usuario.expediente)
+            self.assertEqual(avisos['gerencia_por_folio'], {str(self.propio.pk): 1})
+            self.assertEqual(avisos['recientes'][0]['de_gerencia'], 1)
+            self.assertEqual(avisos['recientes'][0]['ultimo']['autor_rol'], UsuarioGIO.Rol.ADMIN)
+        # Subgerencia no tenía avisos de este chat: lo recibe por venir de Gerencia.
+        self.assertEqual(self.pendientes(self.sub)['por_folio'], {str(self.propio.pk): 1})
+        self.assertEqual(self.pendientes(self.admin)['total'], 0)
+
+        # Aunque después llegue otro mensaje, el folio con el de Gerencia sigue arriba.
+        self.escribir(self.sub, 'Den seguimiento', url_ajeno)
+        self.escribir(self.otro_tecnico, 'Enterado', url_ajeno)
+        self.escribir(self.tecnico, 'En camino')
+        avisos = self.pendientes(self.sub)
+        self.assertEqual([r['id'] for r in avisos['recientes']],
+                         [self.propio.pk, self.ajeno.pk])
+        self.assertEqual(avisos['recientes'][0]['ultimo']['texto'],
+                         'Atiendan este folio hoy mismo')
+
+    def test_un_folio_sin_tecnico_de_planta_interna_avisa_a_quien_esta_de_turno(self):
+        self.propio.evaluador = None
+        self.propio.save()
+        self.escribir(self.admin, 'Este folio no tiene quién lo atienda')
+        self.assertEqual(self.pendientes(self.otro_evaluador)['total'], 0)
+        self.turno_hoy(self.otro_evaluador)
+        self.assertEqual(self.pendientes(self.otro_evaluador)['de_gerencia'], 1)
 
     def test_mensaje_vacio_o_demasiado_largo_se_rechaza(self):
         self.assertEqual(self.escribir(self.tecnico, '   ').status_code,
@@ -854,30 +979,6 @@ class CarpetaCompartidaSisaTests(BaseGIOTestCase):
         self.assertEqual(Incidente.objects.filter(folio__in=['70000003', '70000004']).count(), 2)
         self.assertFalse((self.entrada / 'b.csv').exists())
 
-    def test_retorno_no_se_sobrescribe_si_se_genera_dos_veces_en_el_mismo_minuto(self):
-        liquidado('LIQ-A', self.tecnico, self.evaluador)
-        call_command('exportar_sisa', stdout=io.StringIO())
-        liquidado('LIQ-B', self.tecnico, self.evaluador)
-        call_command('exportar_sisa', stdout=io.StringIO())
-        archivos = sorted(self.salida.glob('RETORNO_SISA_*.csv'))
-        self.assertEqual(len(archivos), 2)
-        folios = set()
-        for archivo in archivos:
-            with archivo.open(encoding='utf-8-sig') as contenido:
-                folios.update(fila['FOLIO'] for fila in csv.DictReader(contenido))
-        self.assertEqual(folios, {'LIQ-A', 'LIQ-B'})
-        self.assertEqual(list(self.salida.glob('*.tmp')), [])
-
-    def test_retorno_fallido_no_marca_los_folios_como_exportados(self):
-        folio = liquidado('LIQ-C', self.tecnico, self.evaluador)
-        with patch('gio_app.management.commands.exportar_sisa.os.replace',
-                   side_effect=PermissionError('Carpeta de red sin permiso de escritura')):
-            with self.assertRaisesMessage(CommandError, 'siguen pendientes'):
-                call_command('exportar_sisa', stdout=io.StringIO())
-        folio.refresh_from_db()
-        self.assertFalse(folio.exportado_sisa)
-        self.assertEqual(list(self.salida.glob('*')), [])
-
     # El reporte lo deja otra computadora en su carpeta compartida (GIO_SISA_ORIGEN).
 
     def reporte_en_origen(self, filas, hace_segundos=600, nombre='CASE_Puebla_Reporte_Completo.xls'):
@@ -1147,13 +1248,11 @@ class BorrarFoliosTests(BaseGIOTestCase):
         self.assertEqual(Incidente.objects.count(), 2)
         self.assertFalse((self.raiz / 'respaldos').exists())
 
-    def test_avisa_de_liquidados_sin_enviar_y_retornos_pendientes(self):
-        liquidado('LIQ-PEND', self.tecnico, self.evaluador)
+    def test_avisa_de_retornos_que_quedaron_en_la_carpeta(self):
         (self.raiz / 'sisa_exports').mkdir()
         (self.raiz / 'sisa_exports' / 'RETORNO_SISA_20261027_110233.csv').write_text('FOLIO\n')
         with patch('builtins.input', return_value='BORRAR'):
             salida = self.borrar()
-        self.assertIn('1 folio(s) liquidado(s) aún no se enviaban a SISA', salida)
         self.assertIn('1 archivo(s) RETORNO_SISA', salida)
         self.assertEqual(Incidente.objects.count(), 0)
 

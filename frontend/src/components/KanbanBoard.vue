@@ -137,7 +137,6 @@ const soltar = (evento, idColumna) => {
 
           <p v-if="item.estatus === 'LIQUIDADO'" class="ficha__mttr">
             MTTR {{ formatearHoras(item.mttr_horas) }}
-            <span v-if="item.exportado_sisa === false" class="ficha__pendiente">por exportar</span>
           </p>
         </article>
 
@@ -345,12 +344,5 @@ const soltar = (evento, idColumna) => {
   display: flex;
   gap: 0.4rem;
   align-items: center;
-}
-
-.ficha__pendiente {
-  color: var(--ambar-texto);
-  border: 1px solid rgb(245 158 11 / 0.4);
-  border-radius: var(--radio-sm);
-  padding: 0 0.35rem;
 }
 </style>
