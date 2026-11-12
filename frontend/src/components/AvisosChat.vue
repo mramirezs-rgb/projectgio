@@ -2,16 +2,18 @@
 import { computed, onUnmounted, ref } from 'vue'
 import { useChat } from '../composables/useChat.js'
 
-const { total, recientes, irAlChat } = useChat()
+const { total, deGerencia, recientes, irAlChat } = useChat()
 
 const abierto = ref(false)
 const boton = ref(null)
 const panel = ref(null)
 const arriba = ref(64)
 
-const etiqueta = computed(() =>
-  total.value ? `Mensajes: ${total.value} sin leer` : 'Mensajes: sin mensajes nuevos',
-)
+const etiqueta = computed(() => {
+  if (!total.value) return 'Mensajes: sin mensajes nuevos'
+  const gerencia = deGerencia.value ? `, ${deGerencia.value} de Gerencia` : ''
+  return `Mensajes: ${total.value} sin leer${gerencia}`
+})
 
 const cerrar = () => {
   abierto.value = false
@@ -58,7 +60,7 @@ onUnmounted(cerrar)
       ref="boton"
       type="button"
       class="gio-boton gio-boton--secundario avisos__boton"
-      :class="{ 'avisos__boton--pendiente': total }"
+      :class="{ 'avisos__boton--pendiente': total, 'avisos__boton--gerencia': deGerencia }"
       :aria-label="etiqueta"
       :title="etiqueta"
       :aria-expanded="abierto"
@@ -78,7 +80,9 @@ onUnmounted(cerrar)
       >
         <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
       </svg>
-      <span v-if="total" class="avisos__cuenta">{{ total > 99 ? '99+' : total }}</span>
+      <span v-if="total" class="avisos__cuenta" :class="{ 'avisos__cuenta--gerencia': deGerencia }">
+        {{ total > 99 ? '99+' : total }}
+      </span>
     </button>
 
     <div
@@ -93,7 +97,15 @@ onUnmounted(cerrar)
       <p v-if="!recientes.length" class="avisos__vacio">No hay mensajes nuevos.</p>
       <ul v-else class="avisos__lista">
         <li v-for="item in recientes" :key="item.id">
-          <button type="button" class="avisos__item" @click="abrirFolio(item)">
+          <button
+            type="button"
+            class="avisos__item"
+            :class="{ 'avisos__item--gerencia': item.de_gerencia }"
+            @click="abrirFolio(item)"
+          >
+            <span v-if="item.de_gerencia" class="avisos__prioridad">
+              Gerencia · {{ item.de_gerencia }} mensaje(s) prioritario(s)
+            </span>
             <span class="avisos__fila">
               <strong class="avisos__folio">{{ item.folio }}</strong>
               <span class="avisos__nuevos">{{ item.sin_leer }} nuevo(s)</span>
@@ -126,6 +138,28 @@ onUnmounted(cerrar)
 .avisos__boton--pendiente {
   border-color: var(--acento);
   color: var(--acento-claro);
+}
+
+.avisos__boton--gerencia {
+  border-color: var(--peligro);
+  color: var(--rojo-vivo);
+}
+
+.avisos__cuenta--gerencia {
+  background-color: var(--peligro);
+}
+
+.avisos__item--gerencia {
+  padding-left: 8px;
+  border-left: 3px solid var(--peligro);
+}
+
+.avisos__prioridad {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--rojo-texto);
 }
 
 .avisos__cuenta {

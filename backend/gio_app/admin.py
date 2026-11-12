@@ -34,8 +34,8 @@ class BitacoraInline(admin.TabularInline):
 @admin.register(Incidente)
 class IncidenteAdmin(admin.ModelAdmin):
     list_display = ('folio', 'empresa', 'estatus', 'area_operativa', 'central',
-                    'tecnico', 'evaluador', 'dilacion_dias', 'mttr_horas', 'exportado_sisa')
-    list_filter = ('estatus', 'exportado_sisa', 'area_operativa', 'estado_enlace', 'codigo_fallo')
+                    'tecnico', 'evaluador', 'dilacion_dias', 'mttr_horas')
+    list_filter = ('estatus', 'area_operativa', 'estado_enlace', 'codigo_fallo')
     search_fields = ('folio', 'empresa', 'referencia', 'ips', 'central')
     autocomplete_fields = ('tecnico', 'evaluador')
     date_hierarchy = 'fecha_apertura'

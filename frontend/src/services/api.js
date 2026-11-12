@@ -151,6 +151,8 @@ export const liquidarIncidente = (id, datos) => api.post(`/incidentes/${id}/liqu
 export const cancelarLiquidacion = (id) => api.post(`/incidentes/${id}/cancelar-liquidacion/`)
 export const getBitacora = (id) => api.get(`/incidentes/${id}/bitacora/`)
 export const getMetricas = (params) => api.get('/incidentes/metricas/', { params })
+export const getDetalleIndicador = (params) =>
+  api.get('/incidentes/metricas/detalle/', { params })
 export const getDesempeno = (params) => api.get('/incidentes/desempeno/', { params })
 export const asignarMasivo = (datos) => api.post('/incidentes/asignar-masivo/', datos)
 

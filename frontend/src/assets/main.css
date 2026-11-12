@@ -480,6 +480,9 @@ textarea {
   border-radius: var(--radio) !important;
   box-shadow: none !important;
 }
+.gio-aviso-gerencia {
+  border-left: 4px solid var(--peligro) !important;
+}
 .gio-swal__title {
   font-size: 1.125rem !important;
   color: var(--texto) !important;

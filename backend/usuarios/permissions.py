@@ -44,6 +44,9 @@ class PuedeEditarIncidente(BasePermission):
         user = request.user
         if request.method in SAFE_METHODS:
             return True
+        # El chat no modifica el folio: escribe en él quien puede verlo.
+        if getattr(view, 'action', None) == 'mensajes':
+            return True
         if user.tiene_vision_global:
             return True
         if user.es_evaluador:

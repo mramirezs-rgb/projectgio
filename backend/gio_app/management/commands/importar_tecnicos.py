@@ -1,6 +1,7 @@
 import secrets
 import string
 import unicodedata
+from collections import Counter
 from pathlib import Path
 
 from django.conf import settings
@@ -13,6 +14,7 @@ from ._sisa import es_cuenta_generica, leer_tabla, normalizar_telefono, primer_v
 UsuarioGIO = get_user_model()
 
 EXTENSIONES = ('*.csv', '*.xlsx', '*.xls')
+AREAS_VALIDAS = {valor for valor, _ in UsuarioGIO.areas_operativas()}
 
 
 def sin_acentos(texto):
@@ -58,7 +60,9 @@ class Command(BaseCommand):
         parser.add_argument('--carpeta', help='Carpeta de reportes alterna.')
         parser.add_argument('--confirmar', action='store_true',
                             help='Ejecuta las altas; sin este indicador solo se listan.')
-        parser.add_argument('--area', default='', help='Área operativa a asignar a las altas.')
+        parser.add_argument('--area', default='',
+                            help='Área operativa para todas las altas. Sin ella, cada técnico '
+                                 'toma el área más frecuente de sus folios en el reporte.')
         parser.add_argument('--password', help='Contraseña inicial común (por defecto aleatoria).')
         parser.add_argument('--excluir', action='append', default=[], metavar='TEXTO',
                             help='Omite los nombres que contienen este texto; se puede repetir.')
@@ -85,6 +89,7 @@ class Command(BaseCommand):
 
         # Nombre -> (rol, teléfono) para las altas; técnicos existentes a los que les falta teléfono.
         nuevos = {}
+        areas_vistas = {}
         por_completar = {}
         omitidos = set()
         for ruta in rutas:
@@ -92,6 +97,8 @@ class Command(BaseCommand):
             for _, cruda in marco.iterrows():
                 fila = {str(k): v for k, v in cruda.items()}
                 externo = primer_valor(fila, ['TECNICO ASIGNADO', 'TECNICO', 'RESPONSABLE'])
+                area_fila = primer_valor(fila, ['AREA', 'AREA OPERATIVA', 'DIVISIONAL',
+                                                'REGION']).upper()
                 telefono = normalizar_telefono(primer_valor(fila, ['TELEFONO TECNICO', 'TELEFONO']))
                 candidatos = (
                     (externo, UsuarioGIO.Rol.TECNICO, telefono),
@@ -112,6 +119,8 @@ class Command(BaseCommand):
                     if len(nombre.split()) >= 2:
                         rol_previo, telefono_previo = nuevos.get(nombre, (rol, ''))
                         nuevos[nombre] = (rol_previo, telefono_previo or telefono_fila)
+                        if area_fila in AREAS_VALIDAS:
+                            areas_vistas.setdefault(nombre, Counter())[area_fila] += 1
 
         if omitidos:
             self.stdout.write(
@@ -123,21 +132,32 @@ class Command(BaseCommand):
                 'Todos los técnicos del reporte ya existen en GIO y tienen teléfono.'))
             return
 
+        area_fija = ' '.join((opciones['area'] or '').split()).upper()
+        if area_fija and area_fija not in AREAS_VALIDAS:
+            raise CommandError(f'El área {area_fija} no existe. Use una de: '
+                               f'{", ".join(sorted(AREAS_VALIDAS))}.')
         usados = set()
         propuestas = []
         for nombre in sorted(nuevos):
             rol, telefono = nuevos[nombre]
             prefijo = 'OQU' if rol == UsuarioGIO.Rol.PI_EVALUADOR else 'TEC'
             primero, apellidos = partir_nombre(nombre)
+            area = area_fija or (areas_vistas[nombre].most_common(1)[0][0]
+                                 if nombre in areas_vistas else '')
             propuestas.append((expediente_desde_nombre(nombre, usados, prefijo), primero,
-                               apellidos, rol, telefono))
+                               apellidos, rol, telefono, area))
 
         if propuestas:
             self.stdout.write(f'{len(propuestas)} técnico(s) sin usuario GIO:')
-            for expediente, primero, apellidos, rol, telefono in propuestas:
+            for expediente, primero, apellidos, rol, telefono, area in propuestas:
                 self.stdout.write(
                     f'  {expediente:<20} {primero} {apellidos}  [{UsuarioGIO.Rol(rol).label}]'
-                    f'  tel. {telefono or "sin teléfono"}')
+                    f'  área {area or "SIN ÁREA"}  tel. {telefono or "sin teléfono"}')
+            sin_area = sum(1 for propuesta in propuestas if not propuesta[5])
+            if sin_area:
+                self.stdout.write(self.style.WARNING(
+                    f'{sin_area} técnico(s) quedarían sin área porque el reporte no trae una '
+                    'reconocida. Use --area o asígnela después en Usuarios.'))
         if por_completar:
             self.stdout.write(f'{len(por_completar)} técnico(s) existente(s) sin teléfono:')
             for usuario, telefono in por_completar.values():
@@ -150,7 +170,7 @@ class Command(BaseCommand):
 
         credenciales = []
         with transaction.atomic():
-            for expediente, primero, apellidos, rol, telefono in propuestas:
+            for expediente, primero, apellidos, rol, telefono, area in propuestas:
                 password = opciones['password'] or password_aleatoria()
                 UsuarioGIO.objects.create_user(
                     expediente=expediente,
@@ -158,7 +178,7 @@ class Command(BaseCommand):
                     first_name=primero[:150],
                     last_name=apellidos[:150],
                     rol=rol,
-                    area_operativa=(opciones['area'] or '').upper(),
+                    area_operativa=area,
                     telefono=telefono,
                 )
                 credenciales.append((expediente, f'{primero} {apellidos}'.strip(), password))

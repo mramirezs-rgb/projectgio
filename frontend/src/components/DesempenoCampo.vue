@@ -1,6 +1,6 @@
 <script setup>
 import { onMounted, ref, watch } from 'vue'
-import { getAreas, getDesempeno, mensajeDeError } from '../services/api.js'
+import { getDesempeno, mensajeDeError } from '../services/api.js'
 import { formatearHoras } from '../utils/formato.js'
 
 const areas = ref([])
@@ -15,6 +15,8 @@ const cargar = async () => {
   try {
     const { data } = await getDesempeno(area.value ? { area: area.value } : {})
     datos.value = data
+    // El servidor indica las áreas por las que se consulta el desempeño.
+    areas.value = data.areas || []
   } catch (error) {
     problema.value = mensajeDeError(error, 'No se pudo cargar el desempeño de campo.')
   } finally {
@@ -22,15 +24,7 @@ const cargar = async () => {
   }
 }
 
-onMounted(async () => {
-  try {
-    const { data } = await getAreas()
-    areas.value = Array.isArray(data) ? data : data.results || []
-  } catch {
-    areas.value = []
-  }
-  await cargar()
-})
+onMounted(cargar)
 
 watch(area, cargar)
 
@@ -47,7 +41,7 @@ const dilacion = (valor) => (valor === null || valor === undefined ? '—' : `${
       <div class="desempeno__controles">
         <select v-model="area" aria-label="Filtrar por área">
           <option value="">Todas las áreas</option>
-          <option v-for="a in areas" :key="a.id" :value="a.nombre">{{ a.nombre }}</option>
+          <option v-for="a in areas" :key="a.id" :value="a.id">{{ a.nombre }}</option>
         </select>
         <button
           type="button"

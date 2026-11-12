@@ -282,8 +282,11 @@ export function useIncidentes() {
       liquidados: lista.filter((i) => i.estatus === ESTATUS.LIQUIDADO).length,
       en_dilacion: lista.filter((i) => i.semaforo === 'alerta' || i.semaforo === 'critico').length,
       criticos: lista.filter((i) => i.semaforo === 'critico').length,
+      dilacion_maxima_dias: Math.max(
+        0,
+        ...lista.filter((i) => i.estatus !== ESTATUS.LIQUIDADO).map((i) => i.dilacion_dias || 0),
+      ),
       mttr_horas_promedio: null,
-      pendientes_exportar: null,
     }
   })
 

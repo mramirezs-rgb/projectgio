@@ -35,6 +35,16 @@ const formulario = ref({ ...FORM_VACIO })
 const modalAbierto = ref(false)
 const editando = computed(() => !!formulario.value.id)
 
+// Los técnicos de planta externa e interna trabajan por zona: sin área no se guardan.
+const ROLES_CON_AREA = ['TECNICO', 'PI_EVALUADOR']
+const AREA_BAJA = 'BAJA'
+const requiereArea = (usuario) => ROLES_CON_AREA.includes(usuario.rol)
+const faltaArea = (usuario) =>
+  usuario.is_active && requiereArea(usuario) && !usuario.area_operativa
+const nombreDeArea = (id) =>
+  id === AREA_BAJA ? 'Baja' : areas.value.find((area) => area.id === id)?.nombre || id
+const tecnicosSinArea = computed(() => usuarios.value.filter(faltaArea).length)
+
 const cargar = async () => {
   cargando.value = true
   problema.value = ''
@@ -76,6 +86,18 @@ const abrirEditar = (usuario) => {
   modalAbierto.value = true
 }
 
+// Un técnico dado de baja quedó en el área de bajas: al volver hay que decir dónde trabajará.
+const abrirReactivar = (usuario) => {
+  formulario.value = {
+    ...FORM_VACIO,
+    ...usuario,
+    password: '',
+    is_active: true,
+    area_operativa: '',
+  }
+  modalAbierto.value = true
+}
+
 const guardar = async () => {
   const datos = { ...formulario.value }
   if (!datos.expediente.trim()) {
@@ -86,6 +108,12 @@ const guardar = async () => {
     mostrarError('Datos incompletos', 'Defina una contraseña inicial para el nuevo usuario.')
     return
   }
+  if (datos.is_active && requiereArea(datos) && !datos.area_operativa) {
+    mostrarError('Datos incompletos', 'Elija el área operativa del técnico.')
+    return
+  }
+  // La baja se hace con su botón; desde aquí un usuario dado de baja conserva su área de bajas.
+  if (!datos.is_active) delete datos.area_operativa
   if (!datos.password) delete datos.password
   delete datos.id
   delete datos.nombre
@@ -116,7 +144,8 @@ const alternarActivo = async (usuario) => {
   if (usuario.is_active) {
     const confirmado = await confirmarAccion(
       'Dar de baja',
-      `${usuario.expediente} dejará de poder iniciar sesión. Sus folios históricos se conservan.`,
+      `${usuario.expediente} dejará de poder iniciar sesión y pasará al área de bajas. ` +
+        'Sus folios históricos se conservan.',
       'Dar de baja',
     )
     if (!confirmado) return
@@ -127,6 +156,10 @@ const alternarActivo = async (usuario) => {
     } catch (error) {
       mostrarError('No se pudo dar de baja', mensajeDeError(error))
     }
+    return
+  }
+  if (requiereArea(usuario)) {
+    abrirReactivar(usuario)
     return
   }
   try {
@@ -160,6 +193,10 @@ const alternarActivo = async (usuario) => {
       </div>
     </header>
 
+    <p v-if="tecnicosSinArea" class="usuarios__aviso" role="status">
+      {{ tecnicosSinArea }} técnico(s) no tienen área operativa. Edítelos para asignársela: sin
+      área no entran al reparto por zona ni al desempeño de su área.
+    </p>
     <p v-if="problema" class="usuarios__error" role="alert">{{ problema }}</p>
     <p v-else-if="cargando" class="gio-cargando">Consultando usuarios…</p>
 
@@ -185,7 +222,10 @@ const alternarActivo = async (usuario) => {
             <td class="listado__mono">{{ usuario.expediente }}</td>
             <td>{{ usuario.nombre }}</td>
             <td>{{ usuario.rol_display }}</td>
-            <td>{{ usuario.area_operativa || '—' }}</td>
+            <td>
+              <span v-if="faltaArea(usuario)" class="listado__falta">Sin área</span>
+              <template v-else>{{ nombreDeArea(usuario.area_operativa) || '—' }}</template>
+            </td>
             <td>{{ usuario.folios_asignados ?? 0 }}</td>
             <td class="listado__fecha">{{ formatearFecha(usuario.last_login) }}</td>
             <td>
@@ -218,7 +258,15 @@ const alternarActivo = async (usuario) => {
     <div v-if="modalAbierto" class="velo" role="dialog" aria-modal="true" @click.self="modalAbierto = false">
       <form class="caja gio-panel" @submit.prevent="guardar">
         <header class="caja__cabecera">
-          <h2>{{ editando ? `Editar ${formulario.expediente}` : 'Nuevo usuario' }}</h2>
+          <h2>
+            {{
+              !editando
+                ? 'Nuevo usuario'
+                : formulario.is_active
+                  ? `Editar ${formulario.expediente}`
+                  : `${formulario.expediente} (dado de baja)`
+            }}
+          </h2>
           <button type="button" class="caja__cerrar" aria-label="Cerrar" @click="modalAbierto = false">
             &times;
           </button>
@@ -251,9 +299,19 @@ const alternarActivo = async (usuario) => {
             <input id="u-apellido" v-model.trim="formulario.last_name" type="text" />
           </div>
           <div>
-            <label class="gio-etiqueta" for="u-area">Área operativa</label>
-            <select id="u-area" v-model="formulario.area_operativa">
-              <option value="">Sin asignar</option>
+            <label class="gio-etiqueta" for="u-area">
+              Área operativa{{ requiereArea(formulario) ? ' *' : '' }}
+            </label>
+            <select v-if="!formulario.is_active" id="u-area" disabled>
+              <option>Baja</option>
+            </select>
+            <select
+              v-else
+              id="u-area"
+              v-model="formulario.area_operativa"
+              :required="requiereArea(formulario)"
+            >
+              <option value="">{{ requiereArea(formulario) ? 'Elija un área…' : 'Sin asignar' }}</option>
               <option v-for="area in areas" :key="area.id" :value="area.id">{{ area.nombre }}</option>
             </select>
           </div>
@@ -337,8 +395,22 @@ const alternarActivo = async (usuario) => {
   font-size: 0.8125rem;
 }
 
+.usuarios__aviso {
+  margin: 0;
+  padding: 0.7rem 0.85rem;
+  background: rgb(245 158 11 / 0.12);
+  border: 1px solid rgb(245 158 11 / 0.4);
+  color: var(--ambar-texto);
+  font-size: 0.8125rem;
+}
+
 .usuarios__caja {
   overflow-x: auto;
+}
+
+.listado__falta {
+  font-weight: 700;
+  color: var(--ambar-texto);
 }
 
 .listado {

@@ -2,6 +2,7 @@ from collections import Counter
 from datetime import timedelta
 
 from django.db import transaction
+from django.db.models import F, Q
 from django.utils import timezone
 
 from .models import BitacoraIncidente, Incidente, TurnoEvaluador
@@ -43,6 +44,18 @@ def evaluadores_de_turno(fecha):
               .select_related('evaluador')
               .order_by('evaluador__expediente'))
     return [turno.evaluador for turno in turnos]
+
+
+def ids_de_turno(ahora=None):
+    """Ids de los evaluadores que hoy tienen turno, o que siguen en uno nocturno que empezó ayer."""
+    ahora = timezone.localtime(ahora or timezone.now())
+    hoy = ahora.date()
+    turnos = TurnoEvaluador.objects.filter(
+        Q(fecha=hoy)
+        | Q(fecha=hoy - timedelta(days=1), hora_fin__lt=F('hora_inicio'), hora_fin__gt=ahora.time()),
+        evaluador__is_active=True,
+    )
+    return set(turnos.values_list('evaluador_id', flat=True))
 
 
 def repartir_folios_del_dia(fecha, responsable, limite=0):

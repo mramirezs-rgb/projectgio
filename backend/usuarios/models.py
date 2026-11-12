@@ -21,8 +21,13 @@ class UsuarioGIO(AbstractUser):
         TLAXCALA = 'TLAXCALA', 'Tlaxcala'
         CORDOBA = 'CORDOBA', 'Córdoba'
         COATZACOALCOS = 'COATZACOALCOS', 'Coatzacoalcos'
+        QUINTANA_ROO = 'QUINTANA ROO', 'Quintana Roo'
+        # No es una zona: ahí quedan los usuarios dados de baja para no mezclarse con las demás.
+        BAJA = 'BAJA', 'Baja'
 
     ROLES_VISION_GLOBAL = (Rol.PI_SUB, Rol.ADMIN)
+    # Técnicos de planta externa e interna: trabajan por zona y deben tener un área.
+    ROLES_CON_AREA = (Rol.TECNICO, Rol.PI_EVALUADOR)
 
     expediente = models.CharField(
         max_length=20,
@@ -56,6 +61,21 @@ class UsuarioGIO(AbstractUser):
         if self.area_operativa:
             self.area_operativa = self.area_operativa.strip().upper()
         return super().save(*args, **kwargs)
+
+    @classmethod
+    def areas_operativas(cls):
+        """Áreas que puede tener un usuario activo, como pares (valor, nombre)."""
+        return [(valor, nombre) for valor, nombre in cls.Area.choices if valor != cls.Area.BAJA]
+
+    def dar_de_baja(self):
+        """Desactiva la cuenta y la pasa al área de bajas; sus folios históricos se conservan."""
+        self.is_active = False
+        self.area_operativa = self.Area.BAJA
+        self.save(update_fields=['is_active', 'area_operativa'])
+
+    @property
+    def requiere_area(self):
+        return self.rol in self.ROLES_CON_AREA
 
     @property
     def nombre_completo(self):
