@@ -194,8 +194,9 @@ const alternarActivo = async (usuario) => {
     </header>
 
     <p v-if="tecnicosSinArea" class="usuarios__aviso" role="status">
-      {{ tecnicosSinArea }} técnico(s) no tienen área operativa. Edítelos para asignársela: sin
-      área no entran al reparto por zona ni al desempeño de su área.
+      {{ tecnicosSinArea }} técnico(s) no tienen área operativa. Mientras no la tengan aparecen en
+      todas las zonas y en el reparto reciben folios de cualquier área. Asígnela editando a cada
+      uno, o a todos a la vez desde el servidor con el comando asignar_areas.
     </p>
     <p v-if="problema" class="usuarios__error" role="alert">{{ problema }}</p>
     <p v-else-if="cargando" class="gio-cargando">Consultando usuarios…</p>
